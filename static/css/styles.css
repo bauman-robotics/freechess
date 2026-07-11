@@ -157,7 +157,7 @@ body {
 }
 
 .chess-info .room-id {
-    color: #ffd700;
+    color: #e0e0e0;        /* Серый, как остальной текст */
     font-weight: bold;
     font-size: 18px;
     cursor: pointer;
@@ -202,7 +202,8 @@ body {
 }
 
 .chess-status .error {
-    color: #e74c3c;
+    color: #e0e0e0;        /* Серый, как остальной текст */
+    background: transparent; /* Прозрачный фон */
 }
 
 .chess-status .info-msg {
@@ -285,11 +286,12 @@ body {
 }
 
 .chess-controls button.danger {
-    background: #dc3545;
+    background: #6c757d;    /* Серый */
+    color: #fff;
 }
 
 .chess-controls button.danger:hover {
-    background: #bd2130;
+    background: #5a6268;
 }
 
 .chess-controls button.secondary {
@@ -402,8 +404,9 @@ body {
 }
 
 .toast.error {
-    background: #dc3545;
-    color: #fff;
+    background: #2a2a2a;   /* Тёмный фон как у info */
+    color: #ffa94d;        /* Оранжевый текст */
+    border: 1px solid #ffa94d; /* Опционально: рамка оранжевая */
 }
 
 .toast.info {
