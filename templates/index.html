@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>♚ Шахматы Песочница</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.2/css/all.min.css" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <div class="main-container">
+        <div class="chess-container">
+            <!-- Левая часть - доска -->
+            <div class="chess-board-wrapper">
+                <div class="chess-info">
+                    <div>
+                        <span class="label">🏠 Комната:</span>
+                        <span class="room-id" id="roomDisplay">—</span>
+                    </div>
+                    <div>
+                        <span id="playersDisplay">👥 Игроков: 0</span>
+                    </div>
+                    <div>
+                        <span id="colorDisplay">⚪ Вы: —</span>
+                    </div>
+                </div>
+
+                <div class="chess-board" id="chessBoard"></div>
+
+                <div class="chess-status" id="chessStatus">
+                    <span class="info-msg">💡 Создайте игру или присоединитесь к комнате</span>
+                </div>
+
+                <div class="chess-controls">
+                    <input id="playerName" placeholder="Ваше имя" value="Игрок">
+                    <button onclick="createGame()" class="success">🚀 Создать</button>
+                    <input id="roomInput" placeholder="ID комнаты">
+                    <button onclick="joinGame()" class="primary">🔗 Войти</button>
+                </div>
+
+                <div class="chess-controls" style="margin-top: 10px;">
+                    <button onclick="resetBoard()" class="secondary">🔄 Сброс</button>
+                    <button onclick="clearBoard()" class="danger">🗑️ Очистить</button>
+                    <button onclick="flipBoard()" class="secondary">🔄 Перевернуть</button>
+                </div>
+            </div>
+
+            <!-- Правая панель -->
+            <div class="chess-sidebar">
+                <h3>♚ Информация</h3>
+
+                <div class="info-item">
+                    <span class="label">🔗 Ссылка:</span>
+                    <span class="value" id="linkDisplay">—</span>
+                </div>
+                <div class="info-item">
+                    <span class="label">🎮 Режим:</span>
+                    <span class="value">Песочница</span>
+                </div>
+                <div class="info-item">
+                    <span class="label">⚪ Белые:</span>
+                    <span class="value" id="whitePlayer">—</span>
+                </div>
+                <div class="info-item">
+                    <span class="label">⚫ Черные:</span>
+                    <span class="value" id="blackPlayer">—</span>
+                </div>
+                <div class="info-item">
+                    <span class="label">📊 Фигур:</span>
+                    <span class="value" id="pieceCount">32</span>
+                </div>
+                <div class="info-item">
+                    <span class="label">🔄 Последний ход:</span>
+                    <span class="value" id="lastMove">—</span>
+                </div>
+
+                <hr>
+
+                <div class="footer-note">
+                    ⚡ Кликните по ID комнаты или ссылке чтобы скопировать
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast уведомления -->
+    <div class="toast" id="toast"></div>
+
+    <!-- Socket.IO -->
+    <script src="https://cdn.socket.io/4.7.0/socket.io.min.js"></script>
+    <!-- Сначала загружаем фигуры, потом основной скрипт -->
+    <script src="{{ url_for('static', filename='js/pieces.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
