@@ -52,10 +52,12 @@ function renderBoard() {
     boardEl.innerHTML = '';
 
     const rows = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
+    const cols = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
 
     for (let ri = 0; ri < 8; ri++) {
         const r = rows[ri];
-        for (let c = 0; c < 8; c++) {
+        for (let ci = 0; ci < 8; ci++) {
+            const c = cols[ci];
             const cell = document.createElement('div');
             const isWhite = (r + c) % 2 === 0;
             cell.className = `chess-cell ${isWhite ? 'white' : 'black'}`;
