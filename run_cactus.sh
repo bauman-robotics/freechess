@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 APP_NAME="Шахматы Песочница"
 VENV_DIR="venv"
 APP_FILE="app.py"
-PORT=8000
+PORT=9000
 
 # Функция для вывода сообщений
 print_message() {
@@ -132,14 +132,11 @@ check_app_file() {
 run_app() {
     print_header "Запуск $APP_NAME"
     
-    # Активируем виртуальное окружение
     source $VENV_DIR/bin/activate
     
-    # Проверяем порт
     if command -v lsof &> /dev/null; then
         if lsof -Pi :$PORT -sTCP:LISTEN -t >/dev/null 2>&1 ; then
             print_warning "Порт $PORT уже используется!"
-            print_message "Попробуйте закрыть программу, использующую этот порт"
             read -p "Хотите продолжить? (y/n): " -n 1 -r
             echo
             if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -153,8 +150,8 @@ run_app() {
     print_message "Нажмите Ctrl+C для остановки"
     echo ""
     
-    # Запускаем Flask приложение
-    $PYTHON_CMD $APP_FILE
+    # ПЕРЕДАЁМ ПОРТ ЧЕРЕЗ ПЕРЕМЕННУЮ ОКРУЖЕНИЯ
+    PORT=$PORT $PYTHON_CMD $APP_FILE
 }
 
 # Остановка приложения

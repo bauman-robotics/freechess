@@ -213,11 +213,14 @@ def handle_clear(data):
     }, room=room_id)
 
 if __name__ == '__main__':
+    import os
+    port = int(os.environ.get('PORT', 8000))
+    
     print("\n" + "=" * 50)
     print("♚ Шахматы Песочница")
     print("=" * 50)
-    print("✅ Сервер запущен!")
-    print("📱 http://127.0.0.1:8000")
+    print(f"✅ Сервер запущен на порту {port}!")
+    print(f"📱 http://127.0.0.1:{port}")
     print("=" * 50 + "\n")
 
-    socketio.run(app, debug=True, host='0.0.0.0', port=8000)
+    socketio.run(app, debug=True, host='0.0.0.0', port=port)

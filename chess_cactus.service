@@ -1,0 +1,26 @@
+# /etc/systemd/system/chess_cactus.service                                                                                                          
+# sudo systemctl daemon-reload
+# sudo systemctl start chess_cactus.service
+# sudo systemctl enable chess_cactus.service
+# sudo systemctl restart chess_cactus.service
+# sudo systemctl status chess_cactus.service
+# sudo systemctl stop chess_cactus.service     
+
+[Unit]
+Description=Шахматы Кактус (порт 9000)
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/root/freechess_cactus/freechess
+Environment="PATH=/root/freechess_cactus/freechess/venv/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/root/freechess_cactus/freechess/start_cactus_daemon.sh
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+StandardOutput=append:/var/log/chess_cactus.log
+StandardError=append:/var/log/chess_cactus_error.log
+
+[Install]
+WantedBy=multi-user.target
