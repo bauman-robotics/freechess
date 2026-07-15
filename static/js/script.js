@@ -176,7 +176,8 @@ async function createGame() {
         document.getElementById('roomDisplay').textContent = currentRoom;
         document.getElementById('roomInput').value = currentRoom;
 
-        const link = `${window.location.origin}/?room=${currentRoom}`;
+        // ИСПОЛЬЗУЕМ ФУНКЦИЮ
+        const link = getRoomLink(currentRoom);
         document.getElementById('linkDisplay').textContent = link;
 
         socket.emit('join', {
@@ -192,6 +193,7 @@ async function createGame() {
     }
 }
 
+
 // ============================================
 // ПРИСОЕДИНЕНИЕ К ИГРЕ
 // ============================================
@@ -206,7 +208,8 @@ function joinGame() {
 
     document.getElementById('roomDisplay').textContent = currentRoom;
 
-    const link = `${window.location.origin}/?room=${currentRoom}`;
+    // ИСПОЛЬЗУЕМ ФУНКЦИЮ
+    const link = getRoomLink(currentRoom);
     document.getElementById('linkDisplay').textContent = link;
 
     socket.emit('join', {
@@ -358,6 +361,18 @@ function copyLink(link) {
 }
 
 // ============================================
+// ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ ФОРМИРОВАНИЯ ССЫЛОК
+// ============================================
+function getRoomLink(roomId) {
+    // Если мы уже на странице /chess/ - используем этот путь
+    if (window.location.pathname.startsWith('/chess/')) {
+        return `${window.location.origin}/chess/?room=${roomId}`;
+    }
+    // Иначе используем корневой путь (для локальной разработки)
+    return `${window.location.origin}/?room=${roomId}`;
+}
+
+// ============================================
 // SOCKET СОБЫТИЯ
 // ============================================
 socket.on('connect', () => {
@@ -369,17 +384,20 @@ socket.on('disconnect', () => {
     showToast('🔌 Отключено от сервера', 'error');
 });
 
+// ============================================
+// SOCKET СОБЫТИЯ
+// ============================================
 socket.on('joined', (data) => {
     currentRoom = data.room_id;
     myColor = data.player.color;
     players = data.players;
 
-    // Авто-ориентация доски под назначенный цвет
     flipped = (myColor === 'black');
 
     document.getElementById('roomDisplay').textContent = currentRoom;
 
-    const link = `${window.location.origin}/?room=${currentRoom}`;
+    // ИСПОЛЬЗУЕМ ФУНКЦИЮ
+    const link = getRoomLink(currentRoom);
     document.getElementById('linkDisplay').textContent = link;
 
     renderBoard();
@@ -389,7 +407,13 @@ socket.on('joined', (data) => {
     const colorName = myColor === 'white' ? 'белых' : 'черных';
     showToast(`✅ Присоединились к комнате ${currentRoom} (${colorEmoji} ${colorName})`, 'success');
 
+    // Обновляем URL в зависимости от текущего пути
     const url = new URL(window.location);
+    if (window.location.pathname.startsWith('/chess/')) {
+        url.pathname = '/chess/';
+    } else {
+        url.pathname = '/';
+    }
     url.searchParams.set('room', currentRoom);
     window.history.pushState({}, '', url);
 });
@@ -453,7 +477,8 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('roomDisplay').addEventListener('click', function() {
         const roomId = this.textContent;
         if (roomId && roomId !== '—') {
-            const link = `${window.location.origin}/?room=${roomId}`;
+            // ИСПОЛЬЗУЕМ ФУНКЦИЮ
+            const link = getRoomLink(roomId);
             copyLink(link);
         }
     });
