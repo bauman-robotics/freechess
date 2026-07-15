@@ -4,9 +4,6 @@
 
 // === КОНФИГУРАЦИЯ ===
 const socket = io();
-//const socket = io({
-//    path: '/chess/socket.io/'
-//});
 let currentRoom = null;
 let board = [];
 let selectedCell = null;
@@ -15,6 +12,12 @@ let myColor = null;
 let flipped = false;
 let players = [];
 let moveHistory = [];
+
+// НОВОЕ: храним последний ход
+let lastMove = {
+    from: null,  // { row, col }
+    to: null     // { row, col }
+};
 
 // === НАЗВАНИЯ ФИГУР ===
 const PIECE_NAMES = {
@@ -32,10 +35,10 @@ function initialBoard() {
     for (let r = 0; r < 8; r++) {
         board[r] = [];
         for (let c = 0; c < 8; c++) {
-            if (r === 0) board[r][c] = backRank[c].toLowerCase(); // чёрные, ранг 8
-            else if (r === 1) board[r][c] = 'p';                   // чёрные пешки, ранг 7
-            else if (r === 6) board[r][c] = 'P';                   // белые пешки, ранг 2
-            else if (r === 7) board[r][c] = backRank[c];           // белые, ранг 1
+            if (r === 0) board[r][c] = backRank[c].toLowerCase();
+            else if (r === 1) board[r][c] = 'p';
+            else if (r === 6) board[r][c] = 'P';
+            else if (r === 7) board[r][c] = backRank[c];
             else board[r][c] = null;
         }
     }
@@ -45,7 +48,7 @@ function initialBoard() {
 board = initialBoard();
 
 // ============================================
-// РЕНДЕРИНГ ДОСКИ С SVG ФИГУРАМИ
+// РЕНДЕРИНГ ДОСКИ С ПОДСВЕТКОЙ ПОСЛЕДНЕГО ХОДА
 // ============================================
 function renderBoard() {
     const boardEl = document.getElementById('chessBoard');
@@ -62,8 +65,17 @@ function renderBoard() {
             const isWhite = (r + c) % 2 === 0;
             cell.className = `chess-cell ${isWhite ? 'white' : 'black'}`;
 
+            // Выбранная клетка
             if (selectedCell && selectedCell.row === r && selectedCell.col === c) {
                 cell.classList.add('selected');
+            }
+
+            // НОВОЕ: подсветка последнего хода
+            if (lastMove.from && lastMove.from.row === r && lastMove.from.col === c) {
+                cell.classList.add('last-move-from');
+            }
+            if (lastMove.to && lastMove.to.row === r && lastMove.to.col === c) {
+                cell.classList.add('last-move-to');
             }
 
             const piece = board[r][c];
@@ -145,6 +157,10 @@ function onCellClick(row, col) {
         board[row][col] = fromPiece;
         board[fromRow][fromCol] = null;
 
+        // НОВОЕ: сохраняем последний ход локально
+        lastMove.from = { row: fromRow, col: fromCol };
+        lastMove.to = { row: row, col: col };
+
         socket.emit('move', {
             room_id: currentRoom,
             from: { row: fromRow, col: fromCol },
@@ -160,6 +176,50 @@ function onCellClick(row, col) {
         selectedCell = null;
         renderBoard();
     }
+}
+
+// ============================================
+// ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ ФОРМИРОВАНИЯ ССЫЛОК
+// ============================================
+function getRoomLink(roomId) {
+    if (window.location.pathname.startsWith('/chess/')) {
+        return `https://5-187-0-91.nip.io/chess/?room=${roomId}`;
+    }
+    if (window.location.port === '8000') {
+        return `http://${window.location.hostname}:8000/?room=${roomId}`;
+    }
+    return `${window.location.origin}/?room=${roomId}`;
+}
+
+// ============================================
+// КОПИРОВАНИЕ ССЫЛКИ
+// ============================================
+function copyLink(link) {
+    if (!link || link === '—' || link.includes('undefined')) {
+        showToast('⚠️ Нет ссылки для копирования', 'warning');
+        return;
+    }
+
+    const roomId = document.getElementById('roomDisplay').textContent;
+    if (roomId && roomId !== '—') {
+        if (window.location.pathname.startsWith('/chess/') && !link.includes('/chess/')) {
+            link = `https://5-187-0-91.nip.io/chess/?room=${roomId}`;
+        } else if (window.location.port === '8000' && !link.includes(window.location.hostname)) {
+            link = `http://${window.location.hostname}:8000/?room=${roomId}`;
+        }
+    }
+
+    navigator.clipboard.writeText(link)
+        .then(() => showToast('📋 Ссылка скопирована!', 'success'))
+        .catch(() => {
+            const textarea = document.createElement('textarea');
+            textarea.value = link;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            showToast('📋 Ссылка скопирована!', 'success');
+        });
 }
 
 // ============================================
@@ -191,7 +251,6 @@ async function createGame() {
         showToast('❌ Ошибка создания комнаты', 'error');
     }
 }
-
 
 // ============================================
 // ПРИСОЕДИНЕНИЕ К ИГРЕ
@@ -232,6 +291,8 @@ function resetBoard() {
         moveHistory = [];
         document.getElementById('lastMove').textContent = '—';
         selectedCell = null;
+        lastMove.from = null;
+        lastMove.to = null;
     }
 }
 
@@ -251,6 +312,8 @@ function clearBoard() {
         moveHistory = [];
         document.getElementById('lastMove').textContent = '—';
         selectedCell = null;
+        lastMove.from = null;
+        lastMove.to = null;
     }
 }
 
@@ -335,63 +398,6 @@ function showToast(message, type = 'info') {
 }
 
 // ============================================
-// КОПИРОВАНИЕ ССЫЛКИ
-// ============================================
-function copyLink(link) {
-    if (!link || link === '—' || link.includes('undefined')) {
-        showToast('⚠️ Нет ссылки для копирования', 'warning');
-        return;
-    }
-
-    // Получаем ID комнаты из отображения
-    const roomId = document.getElementById('roomDisplay').textContent;
-    
-    // Если ссылка неправильная (без /chess/ в продакшене ИЛИ localhost в отладке)
-    if (roomId && roomId !== '—') {
-        // Для продакшена - исправляем ссылку
-        if (window.location.pathname.startsWith('/chess/') && !link.includes('/chess/')) {
-            link = `https://5-187-0-91.nip.io/chess/?room=${roomId}`;
-        }
-        // Для отладки - если ссылка содержит 127.0.0.1 или localhost, но мы на другом хосте
-        else if (window.location.port === '8000' && !link.includes(window.location.hostname)) {
-            link = `http://${window.location.hostname}:8000/?room=${roomId}`;
-        }
-    }
-
-    navigator.clipboard.writeText(link)
-        .then(() => {
-            showToast('📋 Ссылка скопирована!', 'success');
-        })
-        .catch(() => {
-            const textarea = document.createElement('textarea');
-            textarea.value = link;
-            document.body.appendChild(textarea);
-            textarea.select();
-            document.execCommand('copy');
-            document.body.removeChild(textarea);
-            showToast('📋 Ссылка скопирована!', 'success');
-        });
-}
-
-// ============================================
-// ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ ФОРМИРОВАНИЯ ССЫЛОК
-// ============================================
-function getRoomLink(roomId) {
-    // Проверяем путь - если мы на /chess/, то это продакшен
-    if (window.location.pathname.startsWith('/chess/')) {
-        return `https://5-187-0-91.nip.io/chess/?room=${roomId}`;
-    }
-    
-    // Проверяем порт - если 8000, то это отладка
-    if (window.location.port === '8000') {
-        return `http://${window.location.hostname}:8000/?room=${roomId}`;
-    }
-    
-    // Если ничего не подошло - используем текущий URL
-    return `${window.location.origin}/?room=${roomId}`;
-}
-
-// ============================================
 // SOCKET СОБЫТИЯ
 // ============================================
 socket.on('connect', () => {
@@ -403,9 +409,6 @@ socket.on('disconnect', () => {
     showToast('🔌 Отключено от сервера', 'error');
 });
 
-// ============================================
-// SOCKET СОБЫТИЯ
-// ============================================
 socket.on('joined', (data) => {
     currentRoom = data.room_id;
     myColor = data.player.color;
@@ -425,7 +428,6 @@ socket.on('joined', (data) => {
     const colorName = myColor === 'white' ? 'белых' : 'черных';
     showToast(`✅ Присоединились к комнате ${currentRoom} (${colorEmoji} ${colorName})`, 'success');
 
-    // Обновляем URL в истории
     const url = new URL(window.location);
     if (window.location.pathname.startsWith('/chess/')) {
         url.pathname = '/chess/';
@@ -437,6 +439,12 @@ socket.on('joined', (data) => {
 socket.on('board_update', (data) => {
     board = data.board;
     players = data.players || [];
+
+    // НОВОЕ: сохраняем последний ход от сервера
+    if (data.move) {
+        lastMove.from = data.move.from;
+        lastMove.to = data.move.to;
+    }
 
     renderBoard();
     updateStatus();
@@ -458,6 +466,8 @@ socket.on('board_update', (data) => {
     if (data.reset) {
         showToast('🔄 Доска сброшена', 'info');
         selectedCell = null;
+        lastMove.from = null;
+        lastMove.to = null;
         moveHistory = [];
         document.getElementById('lastMove').textContent = '—';
     }
@@ -465,6 +475,8 @@ socket.on('board_update', (data) => {
     if (data.clear) {
         showToast('🗑️ Доска очищена', 'info');
         selectedCell = null;
+        lastMove.from = null;
+        lastMove.to = null;
         moveHistory = [];
         document.getElementById('lastMove').textContent = '—';
     }
