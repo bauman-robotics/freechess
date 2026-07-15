@@ -4,6 +4,9 @@
 
 // === КОНФИГУРАЦИЯ ===
 const socket = io();
+//const socket = io({
+//    path: '/chess/socket.io/'
+//});
 let currentRoom = null;
 let board = [];
 let selectedCell = null;

@@ -8,6 +8,12 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
 socketio = SocketIO(app, cors_allowed_origins="*")
 
+#socketio = SocketIO(
+#    app, 
+#    cors_allowed_origins="*",
+#    path='/chess/socket.io/'  # ← Важно! Совпадает с путем в Nginx
+#)
+
 # Хранилище игр
 games = {}
 
@@ -162,7 +168,8 @@ if __name__ == '__main__':
     print("♚ Шахматы Песочница")
     print("=" * 50)
     print("✅ Сервер запущен!")
-    print("📱 http://127.0.0.1:5000")
+    print("📱 http://127.0.0.1:8000")
     print("=" * 50 + "\n")
 
-    socketio.run(app, debug=True, host='0.0.0.0', port=5000)
+    socketio.run(app, debug=True, host='0.0.0.0', port=8000)
+

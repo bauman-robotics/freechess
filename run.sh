@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 APP_NAME="Шахматы Песочница"
 VENV_DIR="venv"
 APP_FILE="app.py"
-PORT=5000
+PORT=8000
 
 # Функция для вывода сообщений
 print_message() {
