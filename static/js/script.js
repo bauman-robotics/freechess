@@ -62,17 +62,14 @@ function renderBoard() {
             const isWhite = (r + c) % 2 === 0;
             cell.className = `chess-cell ${isWhite ? 'white' : 'black'}`;
 
-            // Подсветка выбранной клетки
             if (selectedCell && selectedCell.row === r && selectedCell.col === c) {
                 cell.classList.add('selected');
             }
 
-            // Фигура (SVG)
             const piece = board[r][c];
             if (piece) {
                 const svgContent = PIECES_SVG[piece] || '';
                 if (svgContent) {
-                    // Создаем контейнер для SVG
                     const svgWrapper = document.createElement('div');
                     svgWrapper.style.width = '100%';
                     svgWrapper.style.height = '100%';
@@ -80,11 +77,8 @@ function renderBoard() {
                     svgWrapper.style.alignItems = 'center';
                     svgWrapper.style.justifyContent = 'center';
                     svgWrapper.style.padding = '10%';
-                    
-                    // Вставляем SVG
                     svgWrapper.innerHTML = svgContent;
-                    
-                    // Настраиваем SVG
+
                     const svgEl = svgWrapper.querySelector('svg');
                     if (svgEl) {
                         svgEl.style.width = '100%';
@@ -93,7 +87,7 @@ function renderBoard() {
                         svgEl.style.maxWidth = '100%';
                         svgEl.style.maxHeight = '100%';
                     }
-                    
+
                     cell.appendChild(svgWrapper);
                 }
             }

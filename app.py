@@ -29,16 +29,16 @@ def initial_board():
             if r == 0:
                 row.append(back_rank[c].lower())   # чёрные, ранг 8
             elif r == 1:
-                row.append('p')                    # чёрные пешки, ранг 7
+                row.append('p')                     # чёрные пешки, ранг 7
             elif r == 6:
-                row.append('P')                    # белые пешки, ранг 2
+                row.append('P')                     # белые пешки, ранг 2
             elif r == 7:
-                row.append(back_rank[c])            # белые, ранг 1
+                row.append(back_rank[c])             # белые, ранг 1
             else:
                 row.append(None)
         board.append(row)
     return board
-
+    
 @app.route('/')
 def index():
     return render_template('index.html')
