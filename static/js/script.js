@@ -380,6 +380,9 @@ socket.on('joined', (data) => {
     myColor = data.player.color;
     players = data.players;
 
+    // Авто-ориентация доски под назначенный цвет
+    flipped = (myColor === 'black');
+
     document.getElementById('roomDisplay').textContent = currentRoom;
 
     const link = `${window.location.origin}/?room=${currentRoom}`;
