@@ -27,13 +27,13 @@ def initial_board():
         row = []
         for c in range(8):
             if r == 0:
-                row.append(back_rank[c])
+                row.append(back_rank[c].lower())   # чёрные, ранг 8
             elif r == 1:
-                row.append('P')
+                row.append('p')                    # чёрные пешки, ранг 7
             elif r == 6:
-                row.append('p')
+                row.append('P')                    # белые пешки, ранг 2
             elif r == 7:
-                row.append(back_rank[c].lower())
+                row.append(back_rank[c])            # белые, ранг 1
             else:
                 row.append(None)
         board.append(row)

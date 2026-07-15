@@ -32,10 +32,10 @@ function initialBoard() {
     for (let r = 0; r < 8; r++) {
         board[r] = [];
         for (let c = 0; c < 8; c++) {
-            if (r === 0) board[r][c] = backRank[c];
-            else if (r === 1) board[r][c] = 'P';
-            else if (r === 6) board[r][c] = 'p';
-            else if (r === 7) board[r][c] = backRank[c].toLowerCase();
+            if (r === 0) board[r][c] = backRank[c].toLowerCase(); // чёрные, ранг 8
+            else if (r === 1) board[r][c] = 'p';                   // чёрные пешки, ранг 7
+            else if (r === 6) board[r][c] = 'P';                   // белые пешки, ранг 2
+            else if (r === 7) board[r][c] = backRank[c];           // белые, ранг 1
             else board[r][c] = null;
         }
     }
