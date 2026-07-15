@@ -13,6 +13,13 @@ let flipped = false;
 let players = [];
 let moveHistory = [];
 
+
+// ============================================
+// ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ 
+// ============================================
+let canUndo = false;  // <-- НОВОЕ: можно ли отменить ход
+
+
 // НОВОЕ: храним последний ход
 let lastMove = {
     from: null,  // { row, col }
@@ -24,6 +31,45 @@ const PIECE_NAMES = {
     'K': 'Король', 'Q': 'Ферзь', 'R': 'Ладья', 'B': 'Слон', 'N': 'Конь', 'P': 'Пешка',
     'k': 'Король', 'q': 'Ферзь', 'r': 'Ладья', 'b': 'Слон', 'n': 'Конь', 'p': 'Пешка'
 };
+
+
+// ============================================
+// ОТМЕНА ХОДА
+// ============================================
+function undoMove() {
+    if (!currentRoom) {
+        showToast('⚠️ Сначала присоединитесь к игре', 'info');
+        return;
+    }
+
+    if (!canUndo) {
+        // Приглушённое предупреждение без жёлтого
+        setStatus('⏳ Нет ходов для отмены', 'no-undo');
+        showToast('Нет ходов для отмены', 'info');
+        return;
+    }
+
+    socket.emit('undo_move', {
+        room_id: currentRoom
+    });
+}
+
+// ============================================
+// ОБНОВЛЕНИЕ КНОПКИ UNDO
+// ============================================
+function updateUndoButton(state) {
+    const btn = document.getElementById('undoBtn');
+    if (btn) {
+        btn.disabled = !state;
+        if (state) {
+            btn.style.opacity = '1';
+            btn.title = 'Отменить последний ход';
+        } else {
+            btn.style.opacity = '0.5';
+            btn.title = 'Нет ходов для отмены';
+        }
+    }
+}
 
 // ============================================
 // ИНИЦИАЛИЗАЦИЯ ДОСКИ
@@ -409,6 +455,9 @@ socket.on('disconnect', () => {
     showToast('🔌 Отключено от сервера', 'error');
 });
 
+// ============================================
+// ОБНОВЛЁННЫЙ SOCKET: joined
+// ============================================
 socket.on('joined', (data) => {
     currentRoom = data.room_id;
     myColor = data.player.color;
@@ -420,6 +469,10 @@ socket.on('joined', (data) => {
 
     const link = getRoomLink(currentRoom);
     document.getElementById('linkDisplay').textContent = link;
+
+    // Сбрасываем состояние при входе
+    canUndo = false;
+    updateUndoButton(false);
 
     renderBoard();
     updateStatus();
@@ -436,14 +489,23 @@ socket.on('joined', (data) => {
     window.history.pushState({}, '', url);
 });
 
+// ============================================
+// ОБНОВЛЁННЫЙ SOCKET: board_update
+// ============================================
 socket.on('board_update', (data) => {
     board = data.board;
     players = data.players || [];
 
-    // НОВОЕ: сохраняем последний ход от сервера
+    // Сохраняем последний ход
     if (data.move) {
         lastMove.from = data.move.from;
         lastMove.to = data.move.to;
+    }
+
+    // Обновляем состояние кнопки Undo
+    if (data.can_undo !== undefined) {
+        canUndo = data.can_undo;
+        updateUndoButton(canUndo);
     }
 
     renderBoard();
@@ -463,6 +525,24 @@ socket.on('board_update', (data) => {
         }
     }
 
+    // Обработка отмены хода
+    if (data.undo) {
+        showToast('↩️ Ход отменён', 'info');
+        selectedCell = null;
+        if (data.undo_move) {
+            const move = data.undo_move;
+            const pieceName = PIECE_NAMES[move.piece] || move.piece;
+            const fromSquare = `${String.fromCharCode(65 + move.from.col)}${8 - move.from.row}`;
+            const toSquare = `${String.fromCharCode(65 + move.to.col)}${8 - move.to.row}`;
+            document.getElementById('lastMove').textContent = `Отменён: ${pieceName} ${fromSquare}→${toSquare}`;
+            setStatus(`↩️ Отменён ход: ${pieceName} ${fromSquare}→${toSquare}`, 'info-msg');
+        }
+        // Очищаем lastMove чтобы подсветка убралась
+        lastMove.from = null;
+        lastMove.to = null;
+        renderBoard();
+    }
+
     if (data.reset) {
         showToast('🔄 Доска сброшена', 'info');
         selectedCell = null;
@@ -470,6 +550,8 @@ socket.on('board_update', (data) => {
         lastMove.to = null;
         moveHistory = [];
         document.getElementById('lastMove').textContent = '—';
+        canUndo = false;
+        updateUndoButton(false);
     }
 
     if (data.clear) {
@@ -479,6 +561,8 @@ socket.on('board_update', (data) => {
         lastMove.to = null;
         moveHistory = [];
         document.getElementById('lastMove').textContent = '—';
+        canUndo = false;
+        updateUndoButton(false);
     }
 });
 
@@ -537,3 +621,4 @@ window.resetBoard = resetBoard;
 window.clearBoard = clearBoard;
 window.flipBoard = flipBoard;
 window.copyLink = copyLink;
+window.undoMove = undoMove;

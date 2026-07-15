@@ -211,6 +211,58 @@ body {
         box-shadow: inset 0 0 0 3px rgba(60, 80, 20, 0.7);
     }
 }
+
+/* ============================================
+   КНОПКА "ВЕРНУТЬ ХОД" (приглушённая)
+   ============================================ */
+.chess-controls button.undo {
+    background: rgba(255, 165, 0, 0.25);
+    color: #e0a040;
+    border: 1px solid rgba(255, 165, 0, 0.3);
+    backdrop-filter: blur(4px);
+    transition: all 0.25s ease;
+}
+
+.chess-controls button.undo:hover:not(:disabled) {
+    background: rgba(255, 165, 0, 0.4);
+    border-color: rgba(255, 165, 0, 0.5);
+    color: #f0b850;
+    box-shadow: 0 0 16px rgba(255, 165, 0, 0.15);
+    transform: scale(1.02);
+}
+
+.chess-controls button.undo:disabled {
+    opacity: 0.25;
+    cursor: not-allowed;
+    transform: none !important;
+    border-color: rgba(255, 255, 255, 0.05);
+    color: #666;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.chess-controls button.undo:disabled:hover {
+    transform: none !important;
+    box-shadow: none !important;
+    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.05);
+}
+
+/* ============================================
+   ПРЕДУПРЕЖДЕНИЕ "НЕТ ХОДОВ ДЛЯ ОТМЕНЫ" (приглушённое)
+   ============================================ */
+.chess-status .no-undo {
+    color: #666;
+    font-style: italic;
+    font-size: 14px;
+    opacity: 0.7;
+}
+
+.chess-status .no-undo::before {
+    content: '⏳ ';
+    opacity: 0.5;
+}
+
+
 /* ============================================
    CHESS INFO
    ============================================ */

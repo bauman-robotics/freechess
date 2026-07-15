@@ -6,7 +6,8 @@
     <meta name="color-scheme" content="dark">
     <title>♚ Шахматы Песочница</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.2/css/all.min.css" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=6">
+    <!--<link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=10">-->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=11">
 </head>
 <body>
     <div class="main-container">
@@ -43,6 +44,7 @@
                     <button onclick="resetBoard()" class="secondary">🔄 Сброс</button>
                     <button onclick="clearBoard()" class="danger">🗑️ Очистить</button>
                     <button onclick="flipBoard()" class="secondary">🔄 Перевернуть</button>
+                    <button onclick="undoMove()" class="undo" id="undoBtn" disabled>↩️ Вернуть ход</button>
                 </div>
             </div>
 
@@ -92,6 +94,6 @@
     <!-- Сначала загружаем фигуры, потом основной скрипт -->
     <script src="{{ url_for('static', filename='js/pieces.js') }}"></script>
     <!--<script src="{{ url_for('static', filename='js/script.js') }}"></script> -->
-    <script src="{{ url_for('static', filename='js/script.js') }}?v=9"></script>	
+    <script src="{{ url_for('static', filename='js/script.js') }}?v=11"></script>	
 </body>
 </html>

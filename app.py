@@ -1,22 +1,13 @@
-# sudo systemctl restart chess.service
-# systemctl restart nginx
-
-
 from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO, emit, join_room
 import random
 import string
 import time
+import copy  # <-- ДОБАВИТЬ для копирования доски
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
 socketio = SocketIO(app, cors_allowed_origins="*")
-
-#socketio = SocketIO(
-#    app, 
-#    cors_allowed_origins="*",
-#    path='/chess/socket.io/'  # ← Важно! Совпадает с путем в Nginx
-#)
 
 # Хранилище игр
 games = {}
@@ -31,13 +22,13 @@ def initial_board():
         row = []
         for c in range(8):
             if r == 0:
-                row.append(back_rank[c].lower())   # чёрные, ранг 8
+                row.append(back_rank[c].lower())
             elif r == 1:
-                row.append('p')                     # чёрные пешки, ранг 7
+                row.append('p')
             elif r == 6:
-                row.append('P')                     # белые пешки, ранг 2
+                row.append('P')
             elif r == 7:
-                row.append(back_rank[c])             # белые, ранг 1
+                row.append(back_rank[c])
             else:
                 row.append(None)
         board.append(row)
@@ -53,7 +44,8 @@ def create_game():
     games[room_id] = {
         'board': initial_board(),
         'players': [],
-        'created_at': time.time()
+        'created_at': time.time(),
+        'history': []  # <-- НОВОЕ: история ходов
     }
     return jsonify({'room_id': room_id})
 
@@ -124,7 +116,17 @@ def handle_move(data):
         emit('error', {'message': 'Нет фигуры на этой клетке'})
         return
 
-    # Перемещаем фигуру (без проверок!)
+    # Сохраняем состояние доски ПЕРЕД ходом в историю
+    games[room_id]['history'].append({
+        'board': copy.deepcopy(board),
+        'move': {
+            'from': from_pos,
+            'to': to_pos,
+            'piece': piece
+        }
+    })
+
+    # Перемещаем фигуру
     board[to_pos['row']][to_pos['col']] = piece
     board[from_pos['row']][from_pos['col']] = None
 
@@ -137,23 +139,64 @@ def handle_move(data):
             'to': to_pos,
             'piece': piece
         },
-        'players': games[room_id]['players']
+        'players': games[room_id]['players'],
+        'can_undo': len(games[room_id]['history']) > 0  # <-- НОВОЕ
     }, room=room_id)
 
     print(f'♟️ Ход: {piece} {from_pos["row"]},{from_pos["col"]} → {to_pos["row"]},{to_pos["col"]}')
 
+# ============================================
+# НОВОЕ: ОТМЕНА ХОДА
+# ============================================
+@socketio.on('undo_move')
+def handle_undo(data):
+    room_id = data.get('room_id')
+
+    if room_id not in games:
+        emit('error', {'message': 'Комната не найдена'})
+        return
+
+    game = games[room_id]
+    history = game['history']
+
+    if not history:
+        emit('error', {'message': 'Нет ходов для отмены'})
+        return
+
+    # Восстанавливаем предыдущее состояние доски
+    previous_state = history.pop()
+    game['board'] = previous_state['board']
+
+    emit('board_update', {
+        'board': game['board'],
+        'players': game['players'],
+        'undo': True,
+        'undo_move': previous_state['move'],
+        'can_undo': len(history) > 0
+    }, room=room_id)
+
+    print(f'↩️ Отменён ход в комнате {room_id}')
+
+# ============================================
+# СБРОС ДОСКИ (обновлённый)
+# ============================================
 @socketio.on('reset_board')
 def handle_reset(data):
     room_id = data.get('room_id')
     if room_id not in games:
         return
     games[room_id]['board'] = initial_board()
+    games[room_id]['history'] = []  # <-- ОЧИЩАЕМ ИСТОРИЮ
     emit('board_update', {
         'board': games[room_id]['board'],
         'players': games[room_id]['players'],
-        'reset': True
+        'reset': True,
+        'can_undo': False
     }, room=room_id)
 
+# ============================================
+# ОЧИСТКА ДОСКИ (обновлённая)
+# ============================================
 @socketio.on('clear_board')
 def handle_clear(data):
     room_id = data.get('room_id')
@@ -161,10 +204,12 @@ def handle_clear(data):
         return
     board = [[None for _ in range(8)] for _ in range(8)]
     games[room_id]['board'] = board
+    games[room_id]['history'] = []  # <-- ОЧИЩАЕМ ИСТОРИЮ
     emit('board_update', {
         'board': board,
         'players': games[room_id]['players'],
-        'clear': True
+        'clear': True,
+        'can_undo': False
     }, room=room_id)
 
 if __name__ == '__main__':
@@ -176,4 +221,3 @@ if __name__ == '__main__':
     print("=" * 50 + "\n")
 
     socketio.run(app, debug=True, host='0.0.0.0', port=8000)
-
