@@ -343,12 +343,18 @@ function copyLink(link) {
         return;
     }
 
-    // Если ссылка без /chess/ в продакшене - исправляем
-    if (window.location.pathname.startsWith('/chess/') && 
-        !link.includes('/chess/')) {
-        const roomId = document.getElementById('roomDisplay').textContent;
-        if (roomId && roomId !== '—') {
+    // Получаем ID комнаты из отображения
+    const roomId = document.getElementById('roomDisplay').textContent;
+    
+    // Если ссылка неправильная (без /chess/ в продакшене ИЛИ localhost в отладке)
+    if (roomId && roomId !== '—') {
+        // Для продакшена - исправляем ссылку
+        if (window.location.pathname.startsWith('/chess/') && !link.includes('/chess/')) {
             link = `https://5-187-0-91.nip.io/chess/?room=${roomId}`;
+        }
+        // Для отладки - если ссылка содержит 127.0.0.1 или localhost, но мы на другом хосте
+        else if (window.location.port === '8000' && !link.includes(window.location.hostname)) {
+            link = `http://${window.location.hostname}:8000/?room=${roomId}`;
         }
     }
 
