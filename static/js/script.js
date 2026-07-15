@@ -364,12 +364,23 @@ function copyLink(link) {
 // ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ ФОРМИРОВАНИЯ ССЫЛОК
 // ============================================
 function getRoomLink(roomId) {
-    // Если мы уже на странице /chess/ - используем этот путь
-    if (window.location.pathname.startsWith('/chess/')) {
-        return `${window.location.origin}/chess/?room=${roomId}`;
+    // Определяем протокол (https если мы на https, иначе http)
+    const protocol = window.location.protocol;
+    const hostname = window.location.hostname;
+    
+    // Для локальной разработки
+    if (hostname === '127.0.0.1' || hostname === 'localhost') {
+        return `${protocol}//${hostname}:8000/?room=${roomId}`;
     }
-    // Иначе используем корневой путь (для локальной разработки)
-    return `${window.location.origin}/?room=${roomId}`;
+    
+    // Для продакшена через Nginx
+    // Используем домен 5-187-0-91.nip.io с https
+    if (window.location.pathname.startsWith('/chess/')) {
+        return `https://5-187-0-91.nip.io/chess/?room=${roomId}`;
+    }
+    
+    // Если мы на http://5.187.0.91 (без nip.io)
+    return `${protocol}//${hostname}/chess/?room=${roomId}`;
 }
 
 // ============================================
