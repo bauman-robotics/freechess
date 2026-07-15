@@ -176,7 +176,6 @@ async function createGame() {
         document.getElementById('roomDisplay').textContent = currentRoom;
         document.getElementById('roomInput').value = currentRoom;
 
-        // ИСПОЛЬЗУЕМ ФУНКЦИЮ
         const link = getRoomLink(currentRoom);
         document.getElementById('linkDisplay').textContent = link;
 
@@ -208,7 +207,6 @@ function joinGame() {
 
     document.getElementById('roomDisplay').textContent = currentRoom;
 
-    // ИСПОЛЬЗУЕМ ФУНКЦИЮ
     const link = getRoomLink(currentRoom);
     document.getElementById('linkDisplay').textContent = link;
 
@@ -340,9 +338,18 @@ function showToast(message, type = 'info') {
 // КОПИРОВАНИЕ ССЫЛКИ
 // ============================================
 function copyLink(link) {
-    if (!link || link === '—') {
+    if (!link || link === '—' || link.includes('undefined')) {
         showToast('⚠️ Нет ссылки для копирования', 'warning');
         return;
+    }
+
+    // Если ссылка без /chess/ в продакшене - исправляем
+    if (window.location.pathname.startsWith('/chess/') && 
+        !link.includes('/chess/')) {
+        const roomId = document.getElementById('roomDisplay').textContent;
+        if (roomId && roomId !== '—') {
+            link = `https://5-187-0-91.nip.io/chess/?room=${roomId}`;
+        }
     }
 
     navigator.clipboard.writeText(link)
@@ -364,21 +371,18 @@ function copyLink(link) {
 // ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ ФОРМИРОВАНИЯ ССЫЛОК
 // ============================================
 function getRoomLink(roomId) {
-    const hostname = window.location.hostname;
-    const port = window.location.port;
-    
-    // Локальная разработка (127.0.0.1 или localhost)
-    if (hostname === '127.0.0.1' || hostname === 'localhost') {
-        return `http://127.0.0.1:8000/?room=${roomId}`;
+    // Проверяем путь - если мы на /chess/, то это продакшен
+    if (window.location.pathname.startsWith('/chess/')) {
+        return `https://5-187-0-91.nip.io/chess/?room=${roomId}`;
     }
     
-    // Удаленная отладка через IP и порт 8000
-    if (hostname === '5.187.0.91' && port === '8000') {
-        return `http://5.187.0.91:8000/?room=${roomId}`;
+    // Проверяем порт - если 8000, то это отладка
+    if (window.location.port === '8000') {
+        return `http://${window.location.hostname}:8000/?room=${roomId}`;
     }
     
-    // Продакшен через Nginx (ВСЕГДА с /chess/ и HTTPS)
-    return `https://5-187-0-91.nip.io/chess/?room=${roomId}`;
+    // Если ничего не подошло - используем текущий URL
+    return `${window.location.origin}/?room=${roomId}`;
 }
 
 // ============================================
@@ -415,16 +419,9 @@ socket.on('joined', (data) => {
     const colorName = myColor === 'white' ? 'белых' : 'черных';
     showToast(`✅ Присоединились к комнате ${currentRoom} (${colorEmoji} ${colorName})`, 'success');
 
-    // Обновляем URL в истории в зависимости от окружения
+    // Обновляем URL в истории
     const url = new URL(window.location);
-    const hostname = window.location.hostname;
-    const port = window.location.port;
-    
-    if (hostname === '127.0.0.1' || hostname === 'localhost') {
-        url.pathname = '/';
-    } else if (hostname === '5.187.0.91' && port === '8000') {
-        url.pathname = '/';
-    } else {
+    if (window.location.pathname.startsWith('/chess/')) {
         url.pathname = '/chess/';
     }
     url.searchParams.set('room', currentRoom);
@@ -490,7 +487,6 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('roomDisplay').addEventListener('click', function() {
         const roomId = this.textContent;
         if (roomId && roomId !== '—') {
-            // ИСПОЛЬЗУЕМ ФУНКЦИЮ
             const link = getRoomLink(roomId);
             copyLink(link);
         }
@@ -522,3 +518,4 @@ window.joinGame = joinGame;
 window.resetBoard = resetBoard;
 window.clearBoard = clearBoard;
 window.flipBoard = flipBoard;
+window.copyLink = copyLink;
