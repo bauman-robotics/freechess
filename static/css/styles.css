@@ -1,11 +1,20 @@
 /* ============================================
-   RESET & GLOBAL
+   COLOR SCHEME - ТЕМНАЯ ТЕМА
    ============================================ */
+:root {
+    color-scheme: dark;
+}
+
 * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
 }
+
+/* ============================================
+   RESET & GLOBAL
+   ============================================ */
+
 
 body {
     font-family: 'Helvetica Neue', Arial, sans-serif;
