@@ -377,7 +377,7 @@ function getRoomLink(roomId) {
         return `http://5.187.0.91:8000/?room=${roomId}`;
     }
     
-    // Продакшен через Nginx (по умолчанию)
+    // Продакшен через Nginx (ВСЕГДА с /chess/ и HTTPS)
     return `https://5-187-0-91.nip.io/chess/?room=${roomId}`;
 }
 
