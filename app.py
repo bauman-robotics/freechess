@@ -1,4 +1,5 @@
 # sudo systemctl restart chess.service
+# systemctl restart nginx
 
 
 from flask import Flask, render_template, request, jsonify
