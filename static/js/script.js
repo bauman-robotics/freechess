@@ -364,23 +364,21 @@ function copyLink(link) {
 // ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ ФОРМИРОВАНИЯ ССЫЛОК
 // ============================================
 function getRoomLink(roomId) {
-    // Определяем протокол (https если мы на https, иначе http)
-    const protocol = window.location.protocol;
     const hostname = window.location.hostname;
+    const port = window.location.port;
     
-    // Для локальной разработки
+    // Локальная разработка (127.0.0.1 или localhost)
     if (hostname === '127.0.0.1' || hostname === 'localhost') {
-        return `${protocol}//${hostname}:8000/?room=${roomId}`;
+        return `http://127.0.0.1:8000/?room=${roomId}`;
     }
     
-    // Для продакшена через Nginx
-    // Используем домен 5-187-0-91.nip.io с https
-    if (window.location.pathname.startsWith('/chess/')) {
-        return `https://5-187-0-91.nip.io/chess/?room=${roomId}`;
+    // Удаленная отладка через IP и порт 8000
+    if (hostname === '5.187.0.91' && port === '8000') {
+        return `http://5.187.0.91:8000/?room=${roomId}`;
     }
     
-    // Если мы на http://5.187.0.91 (без nip.io)
-    return `${protocol}//${hostname}/chess/?room=${roomId}`;
+    // Продакшен через Nginx (по умолчанию)
+    return `https://5-187-0-91.nip.io/chess/?room=${roomId}`;
 }
 
 // ============================================
@@ -407,7 +405,6 @@ socket.on('joined', (data) => {
 
     document.getElementById('roomDisplay').textContent = currentRoom;
 
-    // ИСПОЛЬЗУЕМ ФУНКЦИЮ
     const link = getRoomLink(currentRoom);
     document.getElementById('linkDisplay').textContent = link;
 
@@ -418,12 +415,17 @@ socket.on('joined', (data) => {
     const colorName = myColor === 'white' ? 'белых' : 'черных';
     showToast(`✅ Присоединились к комнате ${currentRoom} (${colorEmoji} ${colorName})`, 'success');
 
-    // Обновляем URL в зависимости от текущего пути
+    // Обновляем URL в истории в зависимости от окружения
     const url = new URL(window.location);
-    if (window.location.pathname.startsWith('/chess/')) {
-        url.pathname = '/chess/';
-    } else {
+    const hostname = window.location.hostname;
+    const port = window.location.port;
+    
+    if (hostname === '127.0.0.1' || hostname === 'localhost') {
         url.pathname = '/';
+    } else if (hostname === '5.187.0.91' && port === '8000') {
+        url.pathname = '/';
+    } else {
+        url.pathname = '/chess/';
     }
     url.searchParams.set('room', currentRoom);
     window.history.pushState({}, '', url);
