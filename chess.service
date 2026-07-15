@@ -1,6 +1,7 @@
 # /etc/systemd/system/chess.service                                                                                                          
 # sudo systemctl daemon-reload
 # sudo systemctl start chess.service
+# sudo systemctl restart chess.service
 # sudo systemctl status chess.service
 # sudo systemctl stop chess.service     
 
