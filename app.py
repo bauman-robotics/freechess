@@ -1,3 +1,6 @@
+# sudo systemctl restart chess.service
+
+
 from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO, emit, join_room
 import random
@@ -38,7 +41,7 @@ def initial_board():
                 row.append(None)
         board.append(row)
     return board
-    
+
 @app.route('/')
 def index():
     return render_template('index.html')
