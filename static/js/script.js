@@ -216,6 +216,7 @@ function updateStatus() {
 }
 
 function updateSidebar() {
+    // === СЧЁТЧИК ФИГУР ===
     let count = 0;
     if (board) {
         for (let r = 0; r < 8; r++) {
@@ -225,13 +226,29 @@ function updateSidebar() {
         }
     }
     document.getElementById('pieceCount').textContent = count;
+    
+    // === ИГРОКИ ===
     document.getElementById('whitePlayer').textContent = players?.[0]?.name || '—';
     document.getElementById('blackPlayer').textContent = players?.[1]?.name || '—';
     document.getElementById('playersDisplay').textContent = `👥 Игроков: ${players ? players.length : 0}`;
     
+    // === ЦВЕТ ИГРОКА ===
     const colorEmoji = myColor === 'white' ? '⚪' : myColor === 'black' ? '⚫' : '❓';
     const colorName = myColor === 'white' ? 'белых' : myColor === 'black' ? 'черных' : '—';
     document.getElementById('colorDisplay').textContent = `${colorEmoji} Вы: ${colorName}`;
+    
+    // === ССЫЛКА НА КОМНАТУ ===
+    const roomId = document.getElementById('roomDisplay')?.textContent;
+    if (roomId && roomId !== '—') {
+        const link = window.getRoomLink ? window.getRoomLink(roomId) : `${window.location.origin}/?room=${roomId}`;
+        document.getElementById('linkDisplay').textContent = link;
+    }
+    
+    // === СЧЁТЧИК СТРЕЛОК ===
+    if (window.arrowSystem) {
+        const arrowCount = window.arrowSystem.getArrows().length;
+        document.getElementById('arrowCount').textContent = arrowCount;
+    }
 }
 
 // === TOAST ===
