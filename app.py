@@ -256,7 +256,7 @@ def handle_join(data):
             'move_history': game['move_history'],
             'arrows': game.get('arrows', [])
         }, room=room_id)
-    
+
 @socketio.on('undo_move')
 def handle_undo(data):
     room_id = data.get('room_id')
@@ -406,6 +406,20 @@ def handle_clear_arrows(data):
         return
     games[room_id]['arrows'] = []
     emit('arrows_cleared', {'room_id': room_id}, room=room_id)
+
+@socketio.on('get_move_history')
+def handle_get_move_history(data):
+    room_id = data.get('room_id')
+    if room_id not in games:
+        emit('error', {'message': 'Комната не найдена'})
+        return
+    
+    game = games[room_id]
+    emit('move_history_response', {
+        'room_id': room_id,
+        'move_history': game.get('move_history', []),
+        'history_len': len(game.get('move_history', []))
+    }, room=request.sid)
 
 if __name__ == '__main__':
     print("\n" + "=" * 50)

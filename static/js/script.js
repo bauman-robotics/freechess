@@ -14,6 +14,7 @@ let moveHistory = [];
 let canUndo = false;
 let lastMove = { from: null, to: null };
 let socket = null;
+let isMyTurn = false; 
 
 // СИНХРОНИЗАЦИЯ С window
 window.canUndo = canUndo;
@@ -256,6 +257,17 @@ function onCellClick(row, col) {
                 
                 document.getElementById('lastMove').textContent = moveStr;
                 setStatus(`Ход: ${moveStr}`, 'success');
+                
+                // Синхронизируем undoManager
+                if (window.undoManager) {
+                    setTimeout(function() {
+                        window.undoManager.syncFromGame(
+                            currentRoom,
+                            moveHistory,
+                            true
+                        );
+                    }, 50);
+                }
                 
                 selectedCell = null;
                 renderBoard();
@@ -644,6 +656,27 @@ window.socket.on('connect', () => {
     }
 });
 
+// Обработчик получения истории с сервера
+window.socket.on('move_history_response', (data) => {
+    console.log('📥 Получена история с сервера:', data);
+    if (data.move_history) {
+        moveHistory = data.move_history;
+        window.moveHistory = moveHistory;
+        console.log('📜 История загружена с сервера:', moveHistory.length);
+        
+        if (window.undoManager) {
+            window.undoManager.syncFromGame(
+                currentRoom,
+                moveHistory,
+                moveHistory.length > 0
+            );
+            window.undoManager.updateUI();
+        }
+        updateHistoryDisplay();
+        updateUndoButton();
+    }
+});
+
 window.socket.on('disconnect', () => {
     console.log('🔌 Отключено от сервера');
     showToast('🔌 Отключено от сервера', 'error');
@@ -686,11 +719,23 @@ window.socket.on('joined', (data) => {
     window.moveHistory = [];
     updateUndoButton();
     
+    // Устанавливаем, чей ход (белые ходят первыми)
+    isMyTurn = (myColor === 'white');
+    console.log(`♟️ ${isMyTurn ? 'Ваш' : 'Ход соперника'} ход`);
+    
     renderBoard();
     updateStatus();
     
     // Обновляем ссылку
     updateRoomLink();
+    
+    // Запрашиваем историю с сервера
+    if (window.socket && currentRoom) {
+        setTimeout(function() {
+            window.socket.emit('get_move_history', { room_id: currentRoom });
+            console.log('📤 Запрос истории с сервера');
+        }, 500);
+    }
     
     if (typeof showToast === 'function') {
         showToast(`✅ Присоединились к комнате ${currentRoom}`, 'success');
@@ -783,7 +828,19 @@ window.socket.on('board_update', (data) => {
         moveHistory = data.move_history;
         window.moveHistory = moveHistory;
         console.log('📜 История синхронизирована с сервера:', moveHistory.length);
+        
+        // Синхронизируем undoManager
+        if (window.undoManager) {
+            window.undoManager.syncFromGame(
+                currentRoom,
+                moveHistory,
+                data.can_undo || false
+            );
+            console.log('✅ undoManager синхронизирован с историей');
+        }
+        
         updateHistoryDisplay();
+        updateUndoButton();
     } else if (data.move && !data.undo) {
         const pieceName = PIECE_NAMES[data.move.piece] || data.move.piece;
         const fromSquare = `${String.fromCharCode(65 + data.move.from.col)}${8 - data.move.from.row}`;
@@ -818,7 +875,18 @@ window.socket.on('board_update', (data) => {
         window.moveHistory = moveHistory;
         console.log('📜 Ход добавлен локально:', moveStr);
         
+        // Синхронизируем undoManager
+        if (window.undoManager) {
+            window.undoManager.syncFromGame(
+                currentRoom,
+                moveHistory,
+                data.can_undo || false
+            );
+            console.log('✅ undoManager синхронизирован с локальной историей');
+        }
+        
         updateHistoryDisplay();
+        updateUndoButton();
     }
     
     // === СИНХРОНИЗАЦИЯ ПРАВИЛ ===
@@ -884,6 +952,11 @@ window.socket.on('board_update', (data) => {
     if (data.can_undo !== undefined) {
         canUndo = data.can_undo;
         window.canUndo = canUndo;
+        // Синхронизируем с undoManager
+        if (window.undoManager) {
+            window.undoManager.canUndo = canUndo;
+            window.undoManager.updateUI();
+        }
         updateUndoButton();
     }
     
@@ -896,11 +969,33 @@ window.socket.on('board_update', (data) => {
     // === ОБРАБОТКА ОТМЕНЫ ===
     if (data.undo) {
         showToast('↩️ Ход отменён', 'info');
-        if (moveHistory.length > 0) {
+        
+        // Синхронизируем историю с сервера
+        if (data.move_history) {
+            moveHistory = data.move_history;
+            window.moveHistory = moveHistory;
+            console.log('📜 История обновлена после отмены (с сервера):', moveHistory.length);
+        } else if (moveHistory.length > 0) {
+            // Если сервер не вернул историю, удаляем последний ход локально
             moveHistory.pop();
             window.moveHistory = moveHistory;
-            updateHistoryDisplay();
+            console.log('📜 История обновлена после отмены (локально):', moveHistory.length);
         }
+        
+        // Синхронизируем undoManager
+        if (window.undoManager) {
+            window.undoManager.syncFromGame(
+                currentRoom,
+                moveHistory,
+                data.can_undo || false
+            );
+            window.undoManager.updateUI();
+            console.log('✅ undoManager синхронизирован после отмены');
+        }
+        
+        canUndo = data.can_undo || false;
+        window.canUndo = canUndo;
+        
         selectedCell = null;
         lastMove.from = null;
         lastMove.to = null;
@@ -910,9 +1005,8 @@ window.socket.on('board_update', (data) => {
         }
         window.lastMoveData = null;
         
-        canUndo = data.can_undo || false;
-        window.canUndo = canUndo;
         updateUndoButton();
+        updateHistoryDisplay();
         renderBoard();
     }
     
@@ -924,6 +1018,9 @@ window.socket.on('board_update', (data) => {
         lastMove.to = null;
         moveHistory = [];
         window.moveHistory = [];
+        if (window.undoManager) {
+            window.undoManager.clearHistory();
+        }
         updateHistoryDisplay();
         canUndo = false;
         window.canUndo = false;
@@ -945,6 +1042,9 @@ window.socket.on('board_update', (data) => {
         lastMove.to = null;
         moveHistory = [];
         window.moveHistory = [];
+        if (window.undoManager) {
+            window.undoManager.clearHistory();
+        }
         updateHistoryDisplay();
         canUndo = false;
         window.canUndo = false;
@@ -1168,6 +1268,17 @@ console.log('✅ script.js загружен');
 function syncUndoManager() {
     if (window.undoManager) {
         console.log('🔄 Синхронизация undoManager...');
+        console.log('  currentRoom:', currentRoom);
+        console.log('  moveHistory length:', moveHistory.length);
+        console.log('  canUndo:', canUndo);
+        
+        // Проверяем: если история пуста, но canUndo true — сбрасываем
+        if (moveHistory.length === 0 && canUndo) {
+            console.log('⚠️ История пуста, но canUndo=true — сбрасываем');
+            canUndo = false;
+            window.canUndo = false;
+        }
+        
         window.undoManager.syncFromGame(
             currentRoom,
             moveHistory,

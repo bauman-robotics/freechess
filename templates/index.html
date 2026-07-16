@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.2/css/all.min.css" />
     
     <!-- Основные стили -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=25">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=26">
     
     <!-- Стили для стрелок -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/arrows.css') }}?v=15">
@@ -197,7 +197,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.2/chess.min.js"></script>
 
     <!-- Модуль правил - ЗАГРУЖАЕТСЯ ПОСЛЕ chess.js -->
-    <script src="{{ url_for('static', filename='js/features/chessRules.js') }}?v=25"></script>
+    <script src="{{ url_for('static', filename='js/features/chessRules.js') }}?v=26"></script>
 
     <!-- Шахматные фигуры (SVG) -->
     <script src="{{ url_for('static', filename='js/pieces.js') }}?v=15" charset="utf-8"></script>
@@ -205,7 +205,7 @@
     <!-- ============================================ -->
     <!-- ОСНОВНОЙ КОД (script.js) -->
     <!-- ============================================ -->
-    <script src="{{ url_for('static', filename='js/script.js') }}?v=49" charset="utf-8"></script>
+    <script src="{{ url_for('static', filename='js/script.js') }}?v=55" charset="utf-8"></script>
     
     <!-- ============================================ -->
     <!-- МОДУЛИ -->
@@ -218,7 +218,7 @@
     <script src="{{ url_for('static', filename='js/features/arrows.js') }}?v=15" charset="utf-8"></script>
     
     <!-- Модуль отмены ходов -->
-    <script src="{{ url_for('static', filename='js/features/undo.js') }}?v=15" charset="utf-8"></script>
+    <script src="{{ url_for('static', filename='js/features/undo.js') }}?v=20" charset="utf-8"></script>
     
     <!-- Модуль подсветки ходов (ПОСЛЕ script.js) -->
     <script src="{{ url_for('static', filename='js/features/moveHighlight.js') }}?v=15" charset="utf-8"></script>
@@ -230,6 +230,60 @@
     
     <!-- Синхронизация подсветки -->
     <script src="{{ url_for('static', filename='js/script-sync.js') }}?v=1" charset="utf-8"></script>
+
+    <!-- ============================================ -->
+    <!-- ПРИНУДИТЕЛЬНАЯ ИНИЦИАЛИЗАЦИЯ UNDOMANAGER -->
+    <!-- ============================================ -->
+    <script>
+        (function() {
+            'use strict';
+            
+            console.log('🔧 Проверка UndoManager...');
+            
+            // Проверяем, что undoManager создан
+            if (typeof window.undoManager === 'undefined' || window.undoManager === null) {
+                console.log('🔧 Принудительная инициализация UndoManager...');
+                
+                const socket = window.socketManager || window.socket;
+                if (!socket) {
+                    console.warn('⚠️ Socket не найден');
+                    return;
+                }
+                
+                // Пробуем создать
+                if (typeof initUndoManager === 'function') {
+                    window.undoManager = initUndoManager(socket);
+                    console.log('✅ UndoManager создан (initUndoManager)');
+                } else if (typeof window.initUndoManager === 'function') {
+                    window.undoManager = window.initUndoManager(socket);
+                    console.log('✅ UndoManager создан (window.initUndoManager)');
+                } else if (typeof UndoManager !== 'undefined') {
+                    window.undoManager = new UndoManager(socket);
+                    window.initUndoManager = function(s) {
+                        if (!window.undoManager) {
+                            window.undoManager = new UndoManager(s);
+                        }
+                        return window.undoManager;
+                    };
+                    console.log('✅ UndoManager создан вручную');
+                } else {
+                    console.error('❌ Не удалось создать UndoManager');
+                }
+            } else {
+                console.log('✅ UndoManager уже существует');
+            }
+            
+            // Синхронизируем undoManager если есть
+            if (window.undoManager) {
+                const roomId = document.getElementById('roomDisplay')?.textContent;
+                const history = window.moveHistory || [];
+                const canUndo = window.canUndo || history.length > 0;
+                if (roomId && roomId !== '—') {
+                    window.undoManager.syncFromGame(roomId, history, canUndo);
+                }
+            }
+        })();
+    </script>
 
     <!-- ============================================ -->
     <!-- ГЛОБАЛЬНЫЕ ФУНКЦИИ ДЛЯ СТРЕЛОК (FALLBACK) -->
