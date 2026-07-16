@@ -79,7 +79,7 @@ function renderBoard() {
 
     // === ПРОВЕРЯЕМ ШАХ ДЛЯ ОБОИХ ИГРОКОВ ===
     let kingsInCheck = [];
-    
+
     if (window.chessRules && window.chessRules.isEnabled) {
         // Проверяем шах для белых
         window.chessRules.setCurrentColor('white');
