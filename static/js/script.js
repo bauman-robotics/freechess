@@ -507,11 +507,20 @@ window.socket.on('board_update', (data) => {
     console.log('📥 board_update:', {
         has_move: !!data.move,
         can_undo: data.can_undo,
-        players: data.players?.length
+        players: data.players?.length,
+        arrows_count: data.arrows?.length || 0
     });
     
     board = data.board;
     players = data.players || [];
+    
+    // === ОБНОВЛЕНИЕ СТРЕЛОК ===
+    if (data.arrows !== undefined) {
+        if (window.arrowSystem) {
+            window.arrowSystem.setArrows(data.arrows);
+            console.log('📐 Стрелки обновлены, всего:', data.arrows.length);
+        }
+    }
     
     // === ОБНОВЛЕНИЕ ПОСЛЕДНЕГО ХОДА И ПОДСВЕТКИ ===
     if (data.move) {

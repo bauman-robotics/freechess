@@ -59,7 +59,7 @@ def handle_disconnect():
     print(f'❌ Client disconnected: {request.sid}')
     for room_id, game in games.items():
         game['players'] = [p for p in game['players'] if p['id'] != request.sid]
-
+        
 @socketio.on('join')
 def handle_join(data):
     room_id = data.get('room_id')
@@ -84,11 +84,13 @@ def handle_join(data):
         'players': games[room_id]['players']
     })
 
+    # Отправляем текущее состояние доски, историю и СТРЕЛКИ
     emit('board_update', {
         'board': games[room_id]['board'],
         'players': games[room_id]['players'],
         'can_undo': len(games[room_id]['history']) > 0,
-        'arrows': games[room_id].get('arrows', [])
+        'history_len': len(games[room_id]['history']),
+        'arrows': games[room_id].get('arrows', [])  # <-- ДОБАВЬТЕ ЭТУ СТРОКУ
     }, room=room_id)
 
     print(f'👤 {player_name} присоединился к комнате {room_id}')
