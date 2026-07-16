@@ -79,6 +79,32 @@ def handle_join(data):
 
     join_room(room_id)
 
+    # Проверяем, не присоединён ли уже этот игрок
+    existing_player = None
+    for p in games[room_id]['players']:
+        if p['id'] == request.sid:
+            existing_player = p
+            break
+
+    if existing_player:
+        # Если игрок уже есть, просто отправляем текущее состояние
+        emit('joined', {
+            'room_id': room_id,
+            'player': existing_player,
+            'players': games[room_id]['players']
+        }, room=request.sid)
+        
+        emit('board_update', {
+            'board': games[room_id]['board'],
+            'players': games[room_id]['players'],
+            'can_undo': len(games[room_id]['history']) > 0,
+            'history_len': len(games[room_id]['history']),
+            'move_history': games[room_id].get('move_history', []),
+            'arrows': games[room_id].get('arrows', []),
+            'rules_enabled': games[room_id].get('rules_enabled', True)
+        }, room=room_id)
+        return
+
     player = {
         'id': request.sid,
         'name': player_name,
@@ -86,23 +112,30 @@ def handle_join(data):
     }
     games[room_id]['players'].append(player)
 
+    # Отправляем новому игроку данные о присоединении
     emit('joined', {
         'room_id': room_id,
         'player': player,
         'players': games[room_id]['players']
-    })
+    }, room=request.sid)
+
+    # Отправляем ВСЕМ в комнате обновление списка игроков
+    emit('players_update', {
+        'players': games[room_id]['players']
+    }, room=room_id)
 
     emit('board_update', {
         'board': games[room_id]['board'],
         'players': games[room_id]['players'],
         'can_undo': len(games[room_id]['history']) > 0,
         'history_len': len(games[room_id]['history']),
-        'move_history': games[room_id].get('move_history', []),  # <-- ПЕРЕДАЁМ ИСТОРИЮ
+        'move_history': games[room_id].get('move_history', []),
         'arrows': games[room_id].get('arrows', []),
         'rules_enabled': games[room_id].get('rules_enabled', True)
     }, room=room_id)
 
     print(f'👤 {player_name} присоединился к комнате {room_id}')
+    print(f'👥 Игроков в комнате: {len(games[room_id]["players"])}')
 
 @socketio.on('move')
 def handle_move(data):
@@ -267,6 +300,18 @@ def handle_clear(data):
         'move_history': [],
         'arrows': game.get('arrows', [])
     }, room=room_id)
+
+# Обработчик для обновления игроков
+@socketio.on('get_players')
+def handle_get_players(data):
+    room_id = data.get('room_id')
+    if room_id not in games:
+        emit('error', {'message': 'Комната не найдена'})
+        return
+    
+    emit('players_update', {
+        'players': games[room_id]['players']
+    }, room=request.sid)
 
 # ============================================
 # СТРЕЛКИ

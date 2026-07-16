@@ -569,6 +569,10 @@ window.undoMove = function() {
 // === SOCKET СОБЫТИЯ ===
 window.socket.on('connect', () => {
     console.log('🔌 Подключено к серверу');
+    // Запрашиваем игроков после подключения
+    if (window.currentRoom) {
+        window.socket.emit('get_players', { room_id: window.currentRoom });
+    }
 });
 
 window.socket.on('disconnect', () => {
@@ -584,14 +588,14 @@ window.socket.on('joined', (data) => {
     myColor = data.player.color;
     players = data.players;
     flipped = (myColor === 'black');
-    window.flipped = flipped; // <-- СИНХРОНИЗИРУЕМ
+    window.flipped = flipped;
     
     document.getElementById('roomDisplay').textContent = currentRoom;
     
     // Синхронизируем с arrowSystem
     if (window.arrowSystem) {
         window.arrowSystem.currentRoom = currentRoom;
-        window.arrowSystem.setFlipped(flipped); // <-- ДОБАВЬТЕ
+        window.arrowSystem.setFlipped(flipped);
     }
     
     // Синхронизируем с undoManager
@@ -599,14 +603,13 @@ window.socket.on('joined', (data) => {
         window.undoManager.setRoom(currentRoom);
     }
     
-
     // Синхронизируем правила при присоединении
     if (data.rules_enabled !== undefined && window.chessRules) {
         window.chessRules.isEnabled = data.rules_enabled;
         setTimeout(updateRulesButton, 100);
         console.log(`♟️ Правила синхронизированы при присоединении: ${data.rules_enabled ? 'включены' : 'выключены'}`);
     }
-
+    
     // Сбрасываем историю
     moveHistory = [];
     canUndo = false;
@@ -622,6 +625,18 @@ window.socket.on('joined', (data) => {
     
     if (typeof showToast === 'function') {
         showToast(`✅ Присоединились к комнате ${currentRoom}`, 'success');
+    }
+});
+
+// === ОБНОВЛЕНИЕ СПИСКА ИГРОКОВ ===
+window.socket.on('players_update', (data) => {
+    console.log('📥 players_update:', data);
+    if (data.players) {
+        players = data.players;
+        // Обновляем отображение
+        updateSidebar();
+        updateStatus();
+        console.log('👥 Игроки обновлены:', players.length);
     }
 });
 
@@ -685,6 +700,13 @@ window.socket.on('board_update', (data) => {
     });
     
     board = data.board;
+
+    // === ОБНОВЛЯЕМ ИГРОКОВ ===
+    if (data.players) {
+        players = data.players;
+        console.log('👥 Игроки обновлены из board_update:', players.length);
+    }
+    
     players = data.players || [];
     
     // === СИНХРОНИЗАЦИЯ ИСТОРИИ ===
