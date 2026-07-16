@@ -7,7 +7,7 @@ class ArrowSystem {
         this.socket = socketManager;
         this.arrows = [];
         this.arrowMode = true; // ВСЕГДА ВКЛЮЧЕН
-        this.flipped = false; //
+        this.flipped = false; 
         this.currentColor = '#00aa44';  // Тёмно-зелёный/изумрудный
         this.colors = ['#00aa44', '#ff0000', '#ffff00', '#00aaff', '#ff00ff', '#ff8800', '#ff1493', '#00ffcc'];
         this.colorIndex = 0;
@@ -121,8 +121,15 @@ class ArrowSystem {
         const cell = e.target.closest('.chess-cell');
         if (!cell) return;
         
-        const row = parseInt(cell.dataset.row);
-        const col = parseInt(cell.dataset.col);
+        let row = parseInt(cell.dataset.row);
+        let col = parseInt(cell.dataset.col);
+        
+        // Если доска перевёрнута, конвертируем координаты обратно
+        const isFlipped = window.flipped || false;
+        if (isFlipped) {
+            row = 7 - row;
+            col = 7 - col;
+        }
         
         e.preventDefault();
         e.stopPropagation();
@@ -146,8 +153,15 @@ class ArrowSystem {
         const cell = e.target.closest('.chess-cell');
         if (!cell) return;
         
-        const row = parseInt(cell.dataset.row);
-        const col = parseInt(cell.dataset.col);
+        let row = parseInt(cell.dataset.row);
+        let col = parseInt(cell.dataset.col);
+        
+        // Если доска перевёрнута, конвертируем координаты обратно
+        const isFlipped = window.flipped || false;
+        if (isFlipped) {
+            row = 7 - row;
+            col = 7 - col;
+        }
         
         this.endCell = { row, col };
         this.updateTemporaryArrow(this.startCell.row, this.startCell.col, row, col);
@@ -166,8 +180,9 @@ class ArrowSystem {
             return;
         }
         
-        const row = parseInt(cell.dataset.row);
-        const col = parseInt(cell.dataset.col);
+        // Получаем координаты из dataset (уже с учётом переворота)
+        let row = parseInt(cell.dataset.row);
+        let col = parseInt(cell.dataset.col);
         
         e.preventDefault();
         e.stopPropagation();
@@ -176,10 +191,19 @@ class ArrowSystem {
         this.removeTemporaryArrow();
         
         if (this.startCell && this.endCell) {
-            const fromRow = this.startCell.row;
-            const fromCol = this.startCell.col;
-            const toRow = this.endCell.row;
-            const toCol = this.endCell.col;
+            let fromRow = this.startCell.row;
+            let fromCol = this.startCell.col;
+            let toRow = this.endCell.row;
+            let toCol = this.endCell.col;
+            
+            // Если доска перевёрнута, конвертируем координаты обратно
+            const isFlipped = window.flipped || false;
+            if (isFlipped) {
+                fromRow = 7 - fromRow;
+                fromCol = 7 - fromCol;
+                toRow = 7 - toRow;
+                toCol = 7 - toCol;
+            }
             
             if (fromRow !== toRow || fromCol !== toCol) {
                 const roomId = window.currentRoom || document.getElementById('roomDisplay')?.textContent;
