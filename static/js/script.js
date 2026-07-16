@@ -353,8 +353,19 @@ window.clearBoard = function() {
 
 window.flipBoard = function() {
     flipped = !flipped;
+    window.flipped = flipped; // Синхронизируем с глобальной переменной
     renderBoard();
-    showToast(flipped ? '🔄 Доска перевернута' : '🔄 Доска в нормальной позиции', 'info');
+    
+    // Обновляем стрелки с учётом переворота
+    if (window.arrowSystem) {
+        setTimeout(() => {
+            window.arrowSystem.setFlipped(flipped);
+        }, 50);
+    }
+    
+    if (typeof showToast === 'function') {
+        showToast(flipped ? '🔄 Доска перевернута' : '🔄 Доска в нормальной позиции', 'info');
+    }
 };
 
 window.copyLink = function(link) {

@@ -7,9 +7,8 @@ class ArrowSystem {
         this.socket = socketManager;
         this.arrows = [];
         this.arrowMode = true; // ВСЕГДА ВКЛЮЧЕН
-        //this.currentColor = '#00ff00'; // ЗЕЛЁНЫЙ ПО УМОЛЧАНИЮ
+        this.flipped = false; //
         this.currentColor = '#00aa44';  // Тёмно-зелёный/изумрудный
-        //this.colors = ['#00ff00', '#ff0000', '#ffff00', '#00aaff', '#ff00ff', '#ff8800', '#ff1493', '#00ffcc'];
         this.colors = ['#00aa44', '#ff0000', '#ffff00', '#00aaff', '#ff00ff', '#ff8800', '#ff1493', '#00ffcc'];
         this.colorIndex = 0;
         this.isDrawing = false;
@@ -332,11 +331,28 @@ class ArrowSystem {
             svg.setAttribute('class', 'board-arrows');
             svg.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10;';
             
+            // Проверяем, перевёрнута ли доска
+            const isFlipped = window.flipped || false;
+            
             this.arrows.forEach((arrow) => {
-                const fromX = (arrow.from.col + 0.5) * cellSize;
-                const fromY = (arrow.from.row + 0.5) * cellSize;
-                const toX = (arrow.to.col + 0.5) * cellSize;
-                const toY = (arrow.to.row + 0.5) * cellSize;
+                let fromRow = arrow.from.row;
+                let fromCol = arrow.from.col;
+                let toRow = arrow.to.row;
+                let toCol = arrow.to.col;
+                
+                // Если доска перевёрнута, зеркалируем координаты
+                if (isFlipped) {
+                    fromRow = 7 - fromRow;
+                    fromCol = 7 - fromCol;
+                    toRow = 7 - toRow;
+                    toCol = 7 - toCol;
+                }
+                
+                const fromX = (fromCol + 0.5) * cellSize;
+                const fromY = (fromRow + 0.5) * cellSize;
+                const toX = (toCol + 0.5) * cellSize;
+                const toY = (toRow + 0.5) * cellSize;
+                
                 this.drawArrow(svg, fromX, fromY, toX, toY, arrow.color);
             });
             
@@ -395,6 +411,11 @@ class ArrowSystem {
         return this.arrows;
     }
     
+    setFlipped(flipped) {
+        this.flipped = flipped;
+        this.render();
+    }
+
     destroy() {
         document.removeEventListener('contextmenu', this.onContextMenu);
         if (this.boardElement) {
