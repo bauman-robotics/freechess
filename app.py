@@ -3,7 +3,7 @@ from flask_socketio import SocketIO, emit, join_room
 import random
 import string
 import time
-import copy  # <-- ДОБАВИТЬ для копирования доски
+import copy
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
@@ -45,8 +45,10 @@ def create_game():
         'board': initial_board(),
         'players': [],
         'created_at': time.time(),
-        'history': []  # <-- НОВОЕ: история ходов
+        'history': [],
+        'arrows': []
     }
+    print(f'✅ Комната создана: {room_id}')
     return jsonify({'room_id': room_id})
 
 @app.route('/api/game/<room_id>')
@@ -55,7 +57,9 @@ def get_game(room_id):
         return jsonify({'error': 'Room not found'}), 404
     return jsonify({
         'board': games[room_id]['board'],
-        'players': len(games[room_id]['players'])
+        'players': len(games[room_id]['players']),
+        'history_len': len(games[room_id]['history']),
+        'arrows_count': len(games[room_id].get('arrows', []))
     })
 
 @socketio.on('connect')
@@ -94,7 +98,10 @@ def handle_join(data):
 
     emit('board_update', {
         'board': games[room_id]['board'],
-        'players': games[room_id]['players']
+        'players': games[room_id]['players'],
+        'can_undo': len(games[room_id]['history']) > 0,
+        'history_len': len(games[room_id]['history']),
+        'arrows': games[room_id].get('arrows', [])
     }, room=room_id)
 
     print(f'👤 {player_name} присоединился к комнате {room_id}')
@@ -109,15 +116,16 @@ def handle_move(data):
         emit('error', {'message': 'Комната не найдена'})
         return
 
-    board = games[room_id]['board']
+    game = games[room_id]
+    board = game['board']
     piece = board[from_pos['row']][from_pos['col']]
 
     if not piece:
         emit('error', {'message': 'Нет фигуры на этой клетке'})
         return
 
-    # Сохраняем состояние доски ПЕРЕД ходом в историю
-    games[room_id]['history'].append({
+    # Сохраняем состояние доски ПЕРЕД ходом
+    game['history'].append({
         'board': copy.deepcopy(board),
         'move': {
             'from': from_pos,
@@ -130,7 +138,14 @@ def handle_move(data):
     board[to_pos['row']][to_pos['col']] = piece
     board[from_pos['row']][from_pos['col']] = None
 
-    games[room_id]['board'] = board
+    game['board'] = board
+    game['arrows'] = []  # Очищаем стрелки при ходе
+
+    history_len = len(game['history'])
+    can_undo = history_len > 0
+
+    print(f'♟️ Ход: {piece} {from_pos["row"]},{from_pos["col"]} → {to_pos["row"]},{to_pos["col"]}')
+    print(f'↩️ История: {history_len} ходов, can_undo: {can_undo}')
 
     emit('board_update', {
         'board': board,
@@ -139,15 +154,12 @@ def handle_move(data):
             'to': to_pos,
             'piece': piece
         },
-        'players': games[room_id]['players'],
-        'can_undo': len(games[room_id]['history']) > 0  # <-- НОВОЕ
+        'players': game['players'],
+        'can_undo': can_undo,
+        'history_len': history_len,
+        'arrows': []
     }, room=room_id)
 
-    print(f'♟️ Ход: {piece} {from_pos["row"]},{from_pos["col"]} → {to_pos["row"]},{to_pos["col"]}')
-
-# ============================================
-# НОВОЕ: ОТМЕНА ХОДА
-# ============================================
 @socketio.on('undo_move')
 def handle_undo(data):
     room_id = data.get('room_id')
@@ -159,62 +171,146 @@ def handle_undo(data):
     game = games[room_id]
     history = game['history']
 
+    print(f'↩️ Запрос отмены в комнате {room_id}, история: {len(history)}')
+
     if not history:
         emit('error', {'message': 'Нет ходов для отмены'})
         return
 
-    # Восстанавливаем предыдущее состояние доски
+    # Восстанавливаем предыдущее состояние
     previous_state = history.pop()
     game['board'] = previous_state['board']
+    game['arrows'] = []
+
+    history_len = len(history)
+    can_undo = history_len > 0
+
+    print(f'↩️ Отменён ход, осталось: {history_len}, can_undo: {can_undo}')
 
     emit('board_update', {
         'board': game['board'],
         'players': game['players'],
         'undo': True,
         'undo_move': previous_state['move'],
-        'can_undo': len(history) > 0
+        'can_undo': can_undo,
+        'history_len': history_len,
+        'arrows': []
     }, room=room_id)
 
-    print(f'↩️ Отменён ход в комнате {room_id}')
-
-# ============================================
-# СБРОС ДОСКИ (обновлённый)
-# ============================================
 @socketio.on('reset_board')
 def handle_reset(data):
     room_id = data.get('room_id')
     if room_id not in games:
         return
-    games[room_id]['board'] = initial_board()
-    games[room_id]['history'] = []  # <-- ОЧИЩАЕМ ИСТОРИЮ
+    
+    game = games[room_id]
+    game['board'] = initial_board()
+    game['history'] = []
+    game['arrows'] = []
+    
     emit('board_update', {
-        'board': games[room_id]['board'],
-        'players': games[room_id]['players'],
+        'board': game['board'],
+        'players': game['players'],
         'reset': True,
-        'can_undo': False
+        'can_undo': False,
+        'history_len': 0,
+        'arrows': []
     }, room=room_id)
+    
+    print(f'🔄 Доска сброшена в комнате {room_id}')
 
-# ============================================
-# ОЧИСТКА ДОСКИ (обновлённая)
-# ============================================
 @socketio.on('clear_board')
 def handle_clear(data):
     room_id = data.get('room_id')
     if room_id not in games:
         return
+    
+    game = games[room_id]
     board = [[None for _ in range(8)] for _ in range(8)]
-    games[room_id]['board'] = board
-    games[room_id]['history'] = []  # <-- ОЧИЩАЕМ ИСТОРИЮ
+    game['board'] = board
+    game['history'] = []
+    game['arrows'] = []
+    
     emit('board_update', {
         'board': board,
-        'players': games[room_id]['players'],
+        'players': game['players'],
         'clear': True,
-        'can_undo': False
+        'can_undo': False,
+        'history_len': 0,
+        'arrows': []
     }, room=room_id)
+    
+    print(f'🗑️ Доска очищена в комнате {room_id}')
+
+# ============================================
+# СТРЕЛКИ - ИСПРАВЛЕННАЯ ВЕРСИЯ
+# ============================================
+
+@socketio.on('draw_arrow')
+def handle_draw_arrow(data):
+    print(f'📐 ПОЛУЧЕНА СТРЕЛКА: {data}')
+    
+    room_id = data.get('room_id')
+    from_pos = data.get('from')
+    to_pos = data.get('to')
+    color = data.get('color', '#ff0000')
+    
+    if room_id not in games:
+        print(f'❌ Комната {room_id} не найдена')
+        emit('error', {'message': 'Комната не найдена'})
+        return
+    
+    # Проверяем координаты
+    if not from_pos or not to_pos:
+        print(f'❌ Неверные координаты: from={from_pos}, to={to_pos}')
+        return
+    
+    # Создаём стрелку с уникальным ID
+    arrow = {
+        'id': f"arrow_{int(time.time()*1000)}_{request.sid[:4]}",
+        'from': {
+            'row': from_pos.get('row', 0),
+            'col': from_pos.get('col', 0)
+        },
+        'to': {
+            'row': to_pos.get('row', 0),
+            'col': to_pos.get('col', 0)
+        },
+        'color': color,
+        'player_id': request.sid
+    }
+    
+    # Добавляем в комнату
+    if 'arrows' not in games[room_id]:
+        games[room_id]['arrows'] = []
+    
+    games[room_id]['arrows'].append(arrow)
+    
+    print(f'✅ Стрелка сохранена в комнате {room_id}, всего: {len(games[room_id]["arrows"])}')
+    print(f'   Стрелка: {arrow["from"]} → {arrow["to"]}')
+    
+    # Отправляем всем в комнате
+    emit('arrow_drawn', {
+        'arrow': arrow,
+        'room_id': room_id
+    }, room=room_id)
+    
+    print(f'📤 arrow_drawn отправлен в комнату {room_id}')
+
+@socketio.on('clear_arrows')
+def handle_clear_arrows(data):
+    room_id = data.get('room_id')
+    print(f'🧹 Очистка стрелок в комнате {room_id}')
+    
+    if room_id not in games:
+        return
+    
+    games[room_id]['arrows'] = []
+    emit('arrows_cleared', {'room_id': room_id}, room=room_id)
 
 if __name__ == '__main__':
     print("\n" + "=" * 50)
-    print("♚ Шахматы Песочница")
+    print("♚ Шахматы Песочница со стрелками")
     print("=" * 50)
     print("✅ Сервер запущен!")
     print("📱 http://127.0.0.1:8000")

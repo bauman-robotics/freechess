@@ -1,0 +1,232 @@
+/* static/css/arrows.css */
+
+/* ============================================
+   СТИЛИ ДЛЯ СТРЕЛОК
+   ============================================ */
+
+/* --- КНОПКА ПЕРЕКЛЮЧЕНИЯ РЕЖИМА --- */
+#arrowToggle {
+    transition: all 0.3s ease;
+}
+
+#arrowToggle.active {
+    background: #ffd700 !important;
+    color: #1a1a2e !important;
+    border: 2px solid #ffd700;
+    box-shadow: 0 0 25px rgba(255, 215, 0, 0.3);
+    transform: scale(1.02);
+}
+
+#arrowToggle.active:hover {
+    box-shadow: 0 0 35px rgba(255, 215, 0, 0.4);
+    transform: scale(1.05);
+}
+
+/* --- ПАЛИТРА ЦВЕТОВ --- */
+.arrow-color-picker {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    margin: 8px auto 4px;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 300px;
+}
+
+.arrow-color-picker .label {
+    font-size: 11px;
+    color: #888;
+    margin-right: 4px;
+}
+
+.arrow-color-btn {
+    width: 28px !important;
+    height: 28px !important;
+    border-radius: 50% !important;
+    border: 2px solid rgba(255, 255, 255, 0.2) !important;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 0 !important;
+    min-width: 28px !important;
+    position: relative;
+}
+
+.arrow-color-btn:hover {
+    transform: scale(1.2);
+    border-color: rgba(255, 255, 255, 0.6) !important;
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+}
+
+.arrow-color-btn.active {
+    border-color: #ffd700 !important;
+    border-width: 3px !important;
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.4);
+    transform: scale(1.1);
+}
+
+.arrow-color-btn.active::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 12px;
+    text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+}
+
+.arrow-color-btn.next-color {
+    font-size: 14px !important;
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    color: #aaa !important;
+    width: 28px !important;
+    height: 28px !important;
+    line-height: 28px !important;
+    text-align: center !important;
+}
+
+.arrow-color-btn.next-color:hover {
+    background: rgba(255, 255, 255, 0.15) !important;
+    border-color: rgba(255, 255, 255, 0.3) !important;
+    color: #fff !important;
+}
+
+/* --- ПОДСКАЗКА --- */
+.arrow-hint {
+    font-size: 12px;
+    color: #666;
+    text-align: center;
+    padding: 6px 12px;
+    margin: 6px 0 2px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.arrow-hint .key {
+    background: rgba(255, 255, 255, 0.08);
+    padding: 1px 8px;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    font-weight: bold;
+    color: #aaa;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* --- АНИМАЦИИ ДЛЯ СТРЕЛОК --- */
+.board-arrows {
+    transition: opacity 0.3s ease;
+}
+
+.board-arrows line,
+.board-arrows polygon {
+    transition: all 0.2s ease;
+}
+
+/* Анимация появления стрелки */
+@keyframes arrowAppear {
+    from {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.board-arrows {
+    animation: arrowAppear 0.15s ease-out;
+}
+
+/* Анимация пульсации для временной стрелки */
+#tempArrow line,
+#tempArrow polygon {
+    animation: pulseArrow 0.6s ease-in-out infinite alternate;
+}
+
+@keyframes pulseArrow {
+    from {
+        opacity: 0.7;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* --- АДАПТИВ ДЛЯ МОБИЛЬНЫХ --- */
+@media (max-width: 600px) {
+    .arrow-color-picker {
+        gap: 4px;
+        padding: 6px 10px;
+        max-width: 100%;
+    }
+    
+    .arrow-color-btn {
+        width: 24px !important;
+        height: 24px !important;
+        min-width: 24px !important;
+    }
+    
+    .arrow-hint {
+        font-size: 10px;
+        padding: 4px 8px;
+    }
+    
+    .arrow-hint .key {
+        padding: 0 6px;
+        font-size: 10px;
+    }
+}
+
+/* --- ДОПОЛНИТЕЛЬНЫЕ ЭФФЕКТЫ --- */
+
+/* Свечение активной кнопки */
+#arrowToggle.active {
+    animation: glowPulse 2s ease-in-out infinite;
+}
+
+@keyframes glowPulse {
+    0%, 100% {
+        box-shadow: 0 0 20px rgba(255, 215, 0, 0.2);
+    }
+    50% {
+        box-shadow: 0 0 40px rgba(255, 215, 0, 0.4);
+    }
+}
+
+/* Индикатор текущего цвета в режиме рисования */
+.arrow-mode-indicator {
+    position: fixed;
+    bottom: 80px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.8);
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 2px solid currentColor;
+    color: #fff;
+    font-size: 12px;
+    display: none;
+    align-items: center;
+    gap: 8px;
+    backdrop-filter: blur(10px);
+    pointer-events: none;
+    z-index: 100;
+}
+
+.arrow-mode-indicator .color-preview {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.arrow-mode-indicator.visible {
+    display: flex;
+}

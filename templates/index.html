@@ -5,19 +5,37 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="color-scheme" content="dark">
     <title>♚ Шахматы Песочница</title>
+    
+    <!-- Font Awesome для иконок -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.2/css/all.min.css" />
-    <!--<link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=10">-->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=11">
+    
+    <!-- Основные стили -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=13">
+    
+    <!-- Стили для стрелок -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/arrows.css') }}?v=1">
+    
+    <!-- Стили для отмены ходов -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/undo.css') }}?v=1">
+
+    <!-- Стили для подсветки ходов -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/move-highlight.css') }}?v=1">
+
 </head>
 <body>
     <div class="main-container">
         <div class="chess-container">
-            <!-- Левая часть - доска -->
+            
+            <!-- ============================================ -->
+            <!-- ЛЕВАЯ ЧАСТЬ - ДОСКА -->
+            <!-- ============================================ -->
             <div class="chess-board-wrapper">
+                
+                <!-- Верхняя информационная панель -->
                 <div class="chess-info">
                     <div>
                         <span class="label">🏠 Комната:</span>
-                        <span class="room-id" id="roomDisplay">—</span>
+                        <span class="room-id" id="roomDisplay" title="Кликните чтобы скопировать">—</span>
                     </div>
                     <div>
                         <span id="playersDisplay">👥 Игроков: 0</span>
@@ -27,39 +45,77 @@
                     </div>
                 </div>
 
+                <!-- Шахматная доска -->
                 <div class="chess-board" id="chessBoard"></div>
 
+                <!-- Статус игры -->
                 <div class="chess-status" id="chessStatus">
                     <span class="info-msg">💡 Создайте игру или присоединитесь к комнате</span>
                 </div>
 
+                <!-- Основные кнопки управления -->
                 <div class="chess-controls">
-                    <input id="playerName" placeholder="Ваше имя" value="Игрок">
-                    <button onclick="createGame()" class="success">🚀 Создать</button>
-                    <input id="roomInput" placeholder="ID комнаты">
-                    <button onclick="joinGame()" class="primary">🔗 Войти</button>
+                    <input id="playerName" placeholder="Ваше имя" value="Игрок" maxlength="20">
+                    <button onclick="window.createGame()" class="success">🚀 Создать</button>
+                    <input id="roomInput" placeholder="ID комнаты" maxlength="10">
+                    <button onclick="window.joinGame()" class="primary">🔗 Войти</button>
                 </div>
 
+                <!-- Кнопки управления доской -->
                 <div class="chess-controls" style="margin-top: 10px;">
-                    <button onclick="resetBoard()" class="secondary">🔄 Сброс</button>
-                    <button onclick="clearBoard()" class="danger">🗑️ Очистить</button>
-                    <button onclick="flipBoard()" class="secondary">🔄 Перевернуть</button>
-                    <button onclick="undoMove()" class="undo" id="undoBtn" disabled>↩️ Вернуть ход</button>
+                    <button onclick="window.resetBoard()" class="secondary" title="Сбросить доску в начальную позицию">🔄 Сброс</button>
+                    <button onclick="window.clearBoard()" class="danger" title="Удалить все фигуры с доски">🗑️ Очистить</button>
+                    <button onclick="window.flipBoard()" class="secondary" title="Перевернуть доску">🔄 Перевернуть</button>
+                    <button onclick="window.undoMove()" class="undo" id="undoBtn" disabled title="Нет ходов для отмены">
+                        ↩️ Вернуть ход
+                    </button>
                 </div>
-            </div>
 
-            <!-- Правая панель -->
+                <!-- ============================================ -->
+                <!-- УПРАВЛЕНИЕ СТРЕЛКАМИ -->
+                <!-- ============================================ -->
+                <div class="chess-controls" style="margin-top: 10px; flex-wrap: wrap; justify-content: center;">
+                    <button onclick="window.clearArrows()" class="secondary" title="Удалить все стрелки">
+                        🧹 Убрать стрелки
+                    </button>
+                    <button onclick="window.toggleArrowMode()" class="secondary" id="arrowToggle">
+                        📐 Режим стрелок
+                    </button>
+                    <button onclick="window.nextArrowColor()" class="secondary" title="Сменить цвет стрелки">
+                        🎨 Цвет
+                    </button>
+                </div>
+
+                <!-- Палитра цветов для стрелок -->
+                <div id="arrowColorPicker"></div>
+
+                <!-- Подсказка по стрелкам -->
+                <div class="arrow-hint">
+                    💡 Зажмите <span class="key">ПКМ</span> и проведите по доске, чтобы нарисовать стрелку
+                </div>
+
+            </div>
+            <!-- ===== КОНЕЦ ЛЕВОЙ ЧАСТИ ===== -->
+
+            <!-- ============================================ -->
+            <!-- ПРАВАЯ ПАНЕЛЬ (САЙДБАР) -->
+            <!-- ============================================ -->
             <div class="chess-sidebar">
                 <h3>♚ Информация</h3>
 
+                <!-- Ссылка на комнату -->
                 <div class="info-item">
                     <span class="label">🔗 Ссылка:</span>
-                    <span class="value" id="linkDisplay">—</span>
+                    <span class="value" id="linkDisplay" title="Кликните чтобы скопировать">—</span>
                 </div>
+
+                <!-- Режим игры -->
                 <div class="info-item">
                     <span class="label">🎮 Режим:</span>
                     <span class="value">Песочница</span>
                 </div>
+
+                <!-- Игроки -->
                 <div class="info-item">
                     <span class="label">⚪ Белые:</span>
                     <span class="value" id="whitePlayer">—</span>
@@ -68,10 +124,22 @@
                     <span class="label">⚫ Черные:</span>
                     <span class="value" id="blackPlayer">—</span>
                 </div>
+
+                <!-- Статистика -->
                 <div class="info-item">
                     <span class="label">📊 Фигур:</span>
                     <span class="value" id="pieceCount">32</span>
                 </div>
+                <div class="info-item">
+                    <span class="label">📐 Стрелок:</span>
+                    <span class="value" id="arrowCount">0</span>
+                </div>
+                <div class="info-item">
+                    <span class="label">↩️ Ходов для отмены:</span>
+                    <span class="value" id="undoCount">0</span>
+                </div>
+
+                <!-- Последний ход -->
                 <div class="info-item">
                     <span class="label">🔄 Последний ход:</span>
                     <span class="value" id="lastMove">—</span>
@@ -79,22 +147,463 @@
 
                 <hr>
 
+                <!-- ============================================ -->
+                <!-- ИСТОРИЯ ХОДОВ -->
+                <!-- ============================================ -->
+                <div id="moveHistorySection">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin: 8px 0;">
+                        <span style="color: #888; font-size: 12px;">📜 История ходов</span>
+                        <span class="undo-indicator">
+                            <span>↩️</span>
+                            <span class="count" id="historyCount">0</span>
+                            <span style="font-size: 10px;">ходов</span>
+                        </span>
+                    </div>
+                    <div class="move-history" id="moveHistory">
+                        <div style="color: #666; text-align: center; padding: 8px; font-size: 12px;">История пуста</div>
+                    </div>
+                </div>
+
+                <hr>
+
+                <!-- Подсказка внизу -->
                 <div class="footer-note">
-                    ⚡ Кликните по ID комнаты или ссылке чтобы скопировать
+                    ⚡ Кликните по ID комнаты или ссылке чтобы скопировать<br>
+                    <span style="font-size: 10px; color: #444;">v2.0 со стрелками и отменой ходов</span>
                 </div>
             </div>
+            <!-- ===== КОНЕЦ ПРАВОЙ ПАНЕЛИ ===== -->
+
         </div>
     </div>
 
-    <!-- Toast уведомления -->
+    <!-- ============================================ -->
+    <!-- TOAST УВЕДОМЛЕНИЯ -->
+    <!-- ============================================ -->
     <div class="toast" id="toast"></div>
 
+    <!-- ============================================ -->
+    <!-- СКРИПТЫ -->
+    <!-- ============================================ -->
+    
     <!-- Socket.IO -->
     <script src="https://cdn.socket.io/4.7.0/socket.io.min.js"></script>
-    <!-- Сначала загружаем фигуры, потом основной скрипт -->
-    <!--<script src="{{ url_for('static', filename='js/pieces.js') }}"></script> -->
-    <!--<script src="{{ url_for('static', filename='js/pieces.js') }}?v=11"></script> -->
+    
+    <!-- Шахматные фигуры (SVG) -->
     <script src="{{ url_for('static', filename='js/pieces.js') }}?v=12" charset="utf-8"></script>
-    <script src="{{ url_for('static', filename='js/script.js') }}?v=12" charset="utf-8"></script>
+    
+    <!-- ============================================ -->
+    <!-- ОСНОВНОЙ КОД (script.js) -->
+    <!-- ============================================ -->
+    <script src="{{ url_for('static', filename='js/script.js') }}?v=13" charset="utf-8"></script>
+    
+    <!-- ============================================ -->
+    <!-- МОДУЛИ -->
+    <!-- ============================================ -->
+    
+    <!-- Модуль WebSocket -->
+    <script src="{{ url_for('static', filename='js/core/socket.js') }}?v=1" charset="utf-8"></script>
+    
+    <!-- Модуль стрелок -->
+    <script src="{{ url_for('static', filename='js/features/arrows.js') }}?v=1" charset="utf-8"></script>
+    
+    <!-- Модуль отмены ходов -->
+    <script src="{{ url_for('static', filename='js/features/undo.js') }}?v=1" charset="utf-8"></script>
+    
+    <!-- Модуль подсветки ходов (ПОСЛЕ script.js) -->
+    <script src="{{ url_for('static', filename='js/features/moveHighlight.js') }}?v=1" charset="utf-8"></script>
+    
+    <!-- ============================================ -->
+    <!-- ИНТЕГРАЦИЯ МОДУЛЕЙ -->
+    <!-- ============================================ -->
+    <script src="{{ url_for('static', filename='js/integration/undo-integration.js') }}?v=1" charset="utf-8"></script>
+    
+    <!-- Синхронизация подсветки -->
+    <script src="{{ url_for('static', filename='js/script-sync.js') }}?v=1" charset="utf-8"></script>
+
+    <!-- ============================================ -->
+    <!-- ГЛОБАЛЬНЫЕ ФУНКЦИИ ДЛЯ СТРЕЛОК (FALLBACK) -->
+    <!-- ============================================ -->
+    <script>
+        (function() {
+            'use strict';
+            
+            // Создаём глобальные функции для стрелок, если их нет
+            if (typeof window.toggleArrowMode === 'undefined') {
+                window.toggleArrowMode = function() {
+                    if (window.arrowSystem) {
+                        return window.arrowSystem.toggleMode();
+                    }
+                    console.warn('⚠️ ArrowSystem не найден');
+                    if (typeof showToast === 'function') {
+                        showToast('⚠️ Система стрелок не загружена', 'error');
+                    }
+                };
+                console.log('✅ toggleArrowMode создана (fallback)');
+            }
+            
+            if (typeof window.clearArrows === 'undefined') {
+                window.clearArrows = function() {
+                    if (window.arrowSystem) {
+                        return window.arrowSystem.clearAll();
+                    }
+                    console.warn('⚠️ ArrowSystem не найден');
+                };
+                console.log('✅ clearArrows создана (fallback)');
+            }
+            
+            if (typeof window.nextArrowColor === 'undefined') {
+                window.nextArrowColor = function() {
+                    if (window.arrowSystem) {
+                        return window.arrowSystem.nextColor();
+                    }
+                    console.warn('⚠️ ArrowSystem не найден');
+                };
+                console.log('✅ nextArrowColor создана (fallback)');
+            }
+            
+            console.log('✅ Глобальные функции стрелок созданы (fallback)');
+            console.log('  - toggleArrowMode:', typeof window.toggleArrowMode);
+            console.log('  - clearArrows:', typeof window.clearArrows);
+            console.log('  - nextArrowColor:', typeof window.nextArrowColor);
+        })();
+    </script>
+
+    <!-- ============================================ -->
+    <!-- ФИКС СТРЕЛОК - ВРЕМЕННОЕ РЕШЕНИЕ -->
+    <!-- ============================================ -->
+    <script>
+        (function() {
+            'use strict';
+            
+            console.log('🔧 Установка фикса для стрелок...');
+            
+            function setupArrowHandler() {
+                if (!window.socket) {
+                    console.log('⏳ Ожидание сокета...');
+                    setTimeout(setupArrowHandler, 500);
+                    return;
+                }
+                
+                if (!window.arrowSystem) {
+                    console.log('⏳ Ожидание arrowSystem...');
+                    setTimeout(setupArrowHandler, 500);
+                    return;
+                }
+                
+                console.log('✅ Сокет и arrowSystem найдены, устанавливаем обработчик...');
+                
+                window.socket.off('arrow_drawn');
+                
+                window.socket.on('arrow_drawn', (data) => {
+                    console.log('📥 arrow_drawn ПОЛУЧЕН (фикс):', data);
+                    
+                    if (!window.arrowSystem) {
+                        console.warn('⚠️ ArrowSystem не найден');
+                        return;
+                    }
+                    
+                    const exists = window.arrowSystem.arrows.some(a => a.id === data.arrow.id);
+                    if (exists) {
+                        console.log('ℹ️ Стрелка уже существует');
+                        return;
+                    }
+                    
+                    window.arrowSystem.arrows.push(data.arrow);
+                    console.log('✅ Стрелка добавлена, всего:', window.arrowSystem.arrows.length);
+                    window.arrowSystem.render();
+                });
+                
+                console.log('✅ Обработчик arrow_drawn установлен!');
+                console.log('  Зарегистрирован:', !!window.socket._events?.['arrow_drawn']);
+            }
+            
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', function() {
+                    setTimeout(setupArrowHandler, 300);
+                });
+            } else {
+                setTimeout(setupArrowHandler, 300);
+            }
+            
+            if (window.socket) {
+                window.socket.on('joined', function() {
+                    setTimeout(setupArrowHandler, 300);
+                });
+            }
+            
+            console.log('✅ Фикс для стрелок установлен');
+        })();
+    </script>
+
+    <!-- ============================================ -->
+    <!-- ИНИЦИАЛИЗАЦИЯ -->
+    <!-- ============================================ -->
+    <script>
+        (function() {
+            'use strict';
+            
+            console.log('🚀 Загрузка приложения...');
+            
+            // Функция синхронизации undoManager с игрой
+            function syncUndoWithGame() {
+                if (typeof window.undoManager === 'undefined') {
+                    console.warn('⚠️ UndoManager не найден для синхронизации');
+                    return;
+                }
+                
+                const roomId = document.getElementById('roomDisplay')?.textContent;
+                const history = window.moveHistory || [];
+                const canUndo = window.canUndo || history.length > 0;
+                
+                if (roomId && roomId !== '—') {
+                    window.undoManager.syncFromGame(roomId, history, canUndo);
+                    console.log('✅ UndoManager синхронизирован с игрой');
+                }
+            }
+            
+            // Глобальная функция undoMove
+            window.undoMove = function() {
+                console.log('🔄 window.undoMove вызвана');
+                
+                if (typeof window.undoManager !== 'undefined' && window.undoManager) {
+                    console.log('📤 Вызов undoManager.undoMove()');
+                    return window.undoManager.undoMove();
+                } else {
+                    console.warn('⚠️ UndoManager не найден, пробуем прямой вызов');
+                    
+                    // Fallback: прямой вызов через socket
+                    const roomId = document.getElementById('roomDisplay')?.textContent;
+                    if (window.socket && roomId && roomId !== '—') {
+                        const history = window.moveHistory || [];
+                        if (history.length > 0) {
+                            console.log('📤 Fallback: отправка undo_move напрямую');
+                            window.socket.emit('undo_move', { room_id: roomId });
+                            return true;
+                        } else {
+                            console.log('❌ Нет ходов для отмены');
+                            if (typeof showToast === 'function') {
+                                showToast('Нет ходов для отмены', 'info');
+                            }
+                            return false;
+                        }
+                    } else {
+                        console.error('❌ Нет соединения или комнаты');
+                        if (typeof showToast === 'function') {
+                            showToast('⚠️ Сначала присоединитесь к игре', 'info');
+                        }
+                        return false;
+                    }
+                }
+            };
+            
+            // Ждём загрузки DOM
+            document.addEventListener('DOMContentLoaded', function() {
+                console.log('📄 DOM загружен');
+                
+                // 1. Инициализируем SocketManager если ещё не создан
+                if (typeof window.socketManager === 'undefined' && typeof SocketManager !== 'undefined') {
+                    window.socketManager = new SocketManager();
+                    console.log('✅ SocketManager создан');
+                }
+                
+                // 2. Инициализируем MoveHighlight
+                if (typeof window.moveHighlight === 'undefined' && typeof initMoveHighlight === 'function') {
+                    window.moveHighlight = initMoveHighlight();
+                    console.log('✅ MoveHighlight создан');
+                }
+                
+                // 3. Инициализируем ArrowSystem
+                if (typeof window.arrowSystem === 'undefined' && typeof ArrowSystem !== 'undefined') {
+                    if (window.socketManager) {
+                        window.arrowSystem = new ArrowSystem(window.socketManager);
+                        console.log('✅ ArrowSystem создан');
+                    } else {
+                        console.warn('⚠️ SocketManager не найден для ArrowSystem');
+                    }
+                }
+                
+                // 4. Инициализируем UndoManager
+                if (typeof window.undoManager === 'undefined' && typeof initUndoManager === 'function') {
+                    if (window.socketManager) {
+                        window.undoManager = initUndoManager(window.socketManager);
+                        console.log('✅ UndoManager создан');
+                    } else if (window.socket) {
+                        window.undoManager = initUndoManager(window.socket);
+                        console.log('✅ UndoManager создан (через socket)');
+                    } else {
+                        console.warn('⚠️ Socket не найден для UndoManager');
+                    }
+                }
+                
+                // 5. Интегрируем MoveHighlight с существующим кодом
+                integrateMoveHighlight();
+                
+                // 6. Синхронизируем UndoManager
+                setTimeout(syncUndoWithGame, 200);
+                
+                // 7. Проверяем параметры URL (автоподключение к комнате)
+                const params = new URLSearchParams(window.location.search);
+                const room = params.get('room');
+                
+                if (room) {
+                    console.log(`🔗 Автоматическое подключение к комнате ${room}`);
+                    document.getElementById('roomInput').value = room;
+                    document.getElementById('roomDisplay').textContent = room;
+                    
+                    setTimeout(function() {
+                        if (typeof window.joinGame === 'function') {
+                            window.joinGame();
+                        } else {
+                            console.warn('⚠️ joinGame не найдена');
+                        }
+                    }, 500);
+                }
+                
+                // 8. Настраиваем клик по ID комнаты для копирования
+                const roomDisplay = document.getElementById('roomDisplay');
+                if (roomDisplay) {
+                    roomDisplay.addEventListener('click', function() {
+                        const roomId = this.textContent;
+                        if (roomId && roomId !== '—') {
+                            if (typeof window.copyLink === 'function') {
+                                const link = window.getRoomLink ? window.getRoomLink(roomId) : roomId;
+                                window.copyLink(link);
+                            }
+                        }
+                    });
+                }
+                
+                // 9. Настраиваем клик по ссылке для копирования
+                const linkDisplay = document.getElementById('linkDisplay');
+                if (linkDisplay) {
+                    linkDisplay.addEventListener('click', function() {
+                        const link = this.textContent;
+                        if (link && link !== '—') {
+                            if (typeof window.copyLink === 'function') {
+                                window.copyLink(link);
+                            }
+                        }
+                    });
+                }
+                
+                // 10. Enter в полях ввода
+                const roomInput = document.getElementById('roomInput');
+                if (roomInput) {
+                    roomInput.addEventListener('keypress', function(e) {
+                        if (e.key === 'Enter') {
+                            if (typeof window.joinGame === 'function') {
+                                window.joinGame();
+                            }
+                        }
+                    });
+                }
+                
+                const playerNameInput = document.getElementById('playerName');
+                if (playerNameInput) {
+                    playerNameInput.addEventListener('keypress', function(e) {
+                        if (e.key === 'Enter') {
+                            if (roomInput) roomInput.focus();
+                        }
+                    });
+                }
+                
+                // ============================================
+                // Убеждаемся, что showToast глобально доступна
+                // ============================================
+                if (typeof window.showToast === 'undefined') {
+                    window.showToast = function(message, type = 'info') {
+                        const toast = document.getElementById('toast');
+                        if (!toast) {
+                            console.log(`[${type}] ${message}`);
+                            return;
+                        }
+                        toast.textContent = message;
+                        toast.className = `toast ${type}`;
+                        clearTimeout(window.toastTimeout);
+                        setTimeout(() => toast.classList.add('show'), 10);
+                        window.toastTimeout = setTimeout(() => toast.classList.remove('show'), 3000);
+                    };
+                    console.log('✅ showToast глобально доступна');
+                }
+                
+                // ============================================
+                // Синхронизация при обновлении доски
+                // ============================================
+                if (window.socket) {
+                    window.socket.on('board_update', function() {
+                        setTimeout(syncUndoWithGame, 100);
+                    });
+                    
+                    window.socket.on('joined', function() {
+                        setTimeout(syncUndoWithGame, 200);
+                    });
+                }
+                
+                console.log('✅ Приложение готово!');
+                console.log('📋 Доступные глобальные функции:');
+                console.log('  - createGame()');
+                console.log('  - joinGame()');
+                console.log('  - resetBoard()');
+                console.log('  - clearBoard()');
+                console.log('  - flipBoard()');
+                console.log('  - undoMove()');
+                console.log('  - copyLink()');
+                console.log('  - toggleArrowMode()');
+                console.log('  - clearArrows()');
+                console.log('  - nextArrowColor()');
+                console.log('  - getRoomLink()');
+            });
+            
+            // ============================================
+            // ИНТЕГРАЦИЯ MOVEHIGHLIGHT
+            // ============================================
+            function integrateMoveHighlight() {
+                if (typeof window.moveHighlight === 'undefined') {
+                    console.warn('⚠️ MoveHighlight не найден для интеграции');
+                    return;
+                }
+                
+                const originalRender = window.renderBoard;
+                if (typeof originalRender === 'function') {
+                    window.renderBoard = function() {
+                        if (typeof originalRender === 'function') {
+                            originalRender();
+                        }
+                        
+                        if (window.moveHighlight && window.moveHighlight.enabled) {
+                            document.querySelectorAll('.chess-cell').forEach(cell => {
+                                const row = parseInt(cell.dataset.row);
+                                const col = parseInt(cell.dataset.col);
+                                
+                                cell.classList.remove('last-move-from', 'last-move-to');
+                                cell.style.animation = '';
+                                
+                                if (window.moveHighlight.isFromCell(row, col)) {
+                                    cell.classList.add('last-move-from');
+                                    cell.style.animation = 'none';
+                                    void cell.offsetHeight;
+                                    cell.style.animation = 'move-highlight-lichess 0.4s ease-out';
+                                } else if (window.moveHighlight.isToCell(row, col)) {
+                                    cell.classList.add('last-move-to');
+                                    cell.style.animation = 'none';
+                                    void cell.offsetHeight;
+                                    cell.style.animation = 'move-highlight-lichess 0.4s ease-out';
+                                }
+                            });
+                        }
+                    };
+                    console.log('✅ MoveHighlight интегрирован с renderBoard');
+                }
+            }
+            
+            // Если DOM уже загружен, запускаем немедленно
+            if (document.readyState === 'complete' || document.readyState === 'interactive') {
+                document.dispatchEvent(new Event('DOMContentLoaded'));
+            }
+            
+        })();
+    </script>
+
 </body>
 </html>

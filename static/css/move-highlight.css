@@ -1,0 +1,72 @@
+/* static/css/move-highlight.css */
+
+/* ============================================
+   ПОДСВЕТКА ПОСЛЕДНЕГО ХОДА
+   ============================================ */
+
+/* Стили для клеток, с которых был сделан ход (last-move-from) 
+   и на которые был сделан ход (last-move-to) */
+.chess-cell.last-move-from,
+.chess-cell.last-move-to {
+    box-shadow: inset 0 0 0 3px rgba(60, 80, 20, 0.7) !important;
+    animation: move-highlight-lichess 0.4s ease-out;
+    z-index: 1;
+}
+
+/* Анимация появления контура 
+   (в начале толще и ярче, к концу становится тоньше и бледнее) */
+@keyframes move-highlight-lichess {
+    0% {
+        box-shadow: inset 0 0 0 4.5px rgba(60, 80, 20, 0.9);
+    }
+    100% {
+        box-shadow: inset 0 0 0 3px rgba(60, 80, 20, 0.7);
+    }
+}
+
+/* Дополнительный эффект для лучшей видимости */
+.chess-cell.last-move-from::after,
+.chess-cell.last-move-to::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(60, 80, 20, 0.05);
+    pointer-events: none;
+    border-radius: 2px;
+}
+
+/* Особая подсветка для начала хода (немного отличается) */
+.chess-cell.last-move-from {
+    box-shadow: inset 0 0 0 3px rgba(80, 100, 30, 0.8) !important;
+}
+
+/* Особая подсветка для конца хода */
+.chess-cell.last-move-to {
+    box-shadow: inset 0 0 0 3px rgba(50, 70, 15, 0.7) !important;
+}
+
+/* Для тёмных клеток делаем подсветку светлее */
+.chess-cell.black.last-move-from,
+.chess-cell.black.last-move-to {
+    box-shadow: inset 0 0 0 3px rgba(100, 130, 40, 0.9) !important;
+}
+
+/* Адаптив для мобильных */
+@media (max-width: 600px) {
+    .chess-cell.last-move-from,
+    .chess-cell.last-move-to {
+        box-shadow: inset 0 0 0 2px rgba(60, 80, 20, 0.7) !important;
+    }
+    
+    @keyframes move-highlight-lichess {
+        0% {
+            box-shadow: inset 0 0 0 3px rgba(60, 80, 20, 0.9);
+        }
+        100% {
+            box-shadow: inset 0 0 0 2px rgba(60, 80, 20, 0.7);
+        }
+    }
+}
