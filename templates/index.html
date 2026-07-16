@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.2/css/all.min.css" />
     
     <!-- Основные стили -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=23">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=25">
     
     <!-- Стили для стрелок -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/arrows.css') }}?v=15">
@@ -81,14 +81,13 @@
                     <button onclick="window.nextArrowColor()" class="secondary" id="colorBtn" title="Сменить цвет стрелки">
                         🎨 Цвет
                     </button>
+                </div>
 
-                    <!-- Кнопка включения/выключения правил -->
-                    <div class="chess-controls" style="margin-top: 10px;">
-                        <button onclick="window.toggleRules()" class="secondary" id="rulesToggle">
-                            ♟️ Правила
-                        </button>
-                    </div>
-
+                <!-- Кнопка включения/выключения правил -->
+                <div class="chess-controls" style="margin-top: 10px;">
+                    <button onclick="window.toggleRules()" class="secondary" id="rulesToggle">
+                        ♟️ Правила
+                    </button>
                 </div>
 
                 <!-- Палитра цветов для стрелок -->
@@ -98,8 +97,6 @@
                 <div class="arrow-hint">
                     💡 Зажмите <span class="key">ПКМ</span> и проведите по доске, чтобы нарисовать стрелку
                 </div>
-
-
 
             </div>
             <!-- ===== КОНЕЦ ЛЕВОЙ ЧАСТИ ===== -->
@@ -208,7 +205,7 @@
     <!-- ============================================ -->
     <!-- ОСНОВНОЙ КОД (script.js) -->
     <!-- ============================================ -->
-    <script src="{{ url_for('static', filename='js/script.js') }}?v=30" charset="utf-8"></script>
+    <script src="{{ url_for('static', filename='js/script.js') }}?v=32" charset="utf-8"></script>
     
     <!-- ============================================ -->
     <!-- МОДУЛИ -->
@@ -447,6 +444,12 @@
                     } else {
                         console.warn('⚠️ Socket не найден для UndoManager');
                     }
+                }
+
+                // 4.1 Инициализируем кнопку правил
+                if (typeof initRulesButton === 'function') {
+                    initRulesButton();
+                    console.log('✅ Кнопка правил инициализирована');
                 }
                 
                 // 5. Интегрируем MoveHighlight с существующим кодом

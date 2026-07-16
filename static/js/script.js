@@ -815,17 +815,123 @@ window.socket.on('error', (data) => {
 });
 
 
+// === КНОПКА ПРАВИЛ ===
 window.toggleRules = function() {
-    if (window.chessRules) {
-        window.chessRules.setEnabled(!window.chessRules.isEnabled);
-        const btn = document.getElementById('rulesToggle');
-        if (btn) {
-            btn.textContent = window.chessRules.isEnabled ? '♟️ Правила (вкл)' : '♟️ Правила (выкл)';
-            btn.style.background = window.chessRules.isEnabled ? '#28a745' : '#6c757d';
+    if (!window.chessRules) {
+        console.warn('⚠️ chessRules не найден');
+        if (typeof showToast === 'function') {
+            showToast('⚠️ Система правил не загружена', 'error');
         }
+        return;
+    }
+    
+    // Переключаем состояние
+    window.chessRules.setEnabled(!window.chessRules.isEnabled);
+    updateRulesButton();
+    
+    // Обновляем статус
+    if (typeof updateStatus === 'function') {
+        updateStatus();
+    }
+    
+    // Показываем уведомление
+    if (typeof showToast === 'function') {
         showToast(window.chessRules.isEnabled ? '✅ Правила включены' : '⛔ Правила выключены', 'info');
     }
 };
+
+// === ОБНОВЛЕНИЕ КНОПКИ ПРАВИЛ ===
+function updateRulesButton() {
+    const btn = document.getElementById('rulesToggle');
+    if (!btn) return;
+    
+    if (!window.chessRules) {
+        btn.innerHTML = '♟️ Правила';
+        btn.style.background = '';
+        btn.style.borderColor = '';
+        return;
+    }
+    
+    const isEnabled = window.chessRules.isEnabled;
+    const btnHeight = btn.offsetHeight || 30;
+    const dotSize = Math.max(10, Math.round(btnHeight / 3));
+    
+    // Создаём индикатор
+    const indicator = document.createElement('span');
+    indicator.className = 'rules-indicator';
+    
+    if (isEnabled) {
+        // Зелёный закрашенный кружок
+        indicator.style.cssText = `
+            display: inline-block;
+            width: ${dotSize}px;
+            height: ${dotSize}px;
+            border-radius: 50%;
+            background: #28a745;
+            border: 2px solid #28a745;
+            margin-left: 6px;
+            vertical-align: middle;
+            flex-shrink: 0;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 10px rgba(40, 167, 69, 0.3);
+        `;
+        btn.style.background = 'rgba(40, 167, 69, 0.15)';
+        btn.style.borderColor = '#28a745';
+        btn.style.color = '#28a745';
+    } else {
+        // Серый незакрашенный кружок (только контур)
+        indicator.style.cssText = `
+            display: inline-block;
+            width: ${dotSize}px;
+            height: ${dotSize}px;
+            border-radius: 50%;
+            background: transparent;
+            border: 2px solid #6c757d;
+            margin-left: 6px;
+            vertical-align: middle;
+            flex-shrink: 0;
+            transition: all 0.3s ease;
+        `;
+        btn.style.background = 'transparent';
+        btn.style.borderColor = '#6c757d';
+        btn.style.color = '#6c757d';
+    }
+    
+    // Очищаем кнопку и добавляем текст + индикатор
+    btn.innerHTML = '';
+    btn.appendChild(document.createTextNode('♟️ Правила '));
+    btn.appendChild(indicator);
+}
+
+// === ИНИЦИАЛИЗАЦИЯ КНОПКИ ПРАВИЛ ===
+function initRulesButton() {
+    const btn = document.getElementById('rulesToggle');
+    if (!btn) return;
+    
+    // Устанавливаем начальное состояние (по умолчанию включены)
+    if (window.chessRules) {
+        window.chessRules.isEnabled = true;
+        updateRulesButton();
+    } else {
+        // Если chessRules ещё не загружен, ждём
+        const checkInterval = setInterval(function() {
+            if (window.chessRules) {
+                window.chessRules.isEnabled = true;
+                updateRulesButton();
+                clearInterval(checkInterval);
+                console.log('✅ Кнопка правил инициализирована');
+            }
+        }, 100);
+        
+        // Таймаут на случай, если не загрузится
+        setTimeout(function() {
+            clearInterval(checkInterval);
+            if (!window.chessRules) {
+                console.warn('⚠️ chessRules не загружен для инициализации кнопки');
+            }
+        }, 3000);
+    }
+}
 
 // === ИНИЦИАЛИЗАЦИЯ ===
 console.log('🚀 Загрузка script.js');
@@ -852,6 +958,7 @@ if (document.readyState === 'loading') {
 } else {
     renderBoard();
     updateUndoButton();
+    initRulesButton();
 }
 
 console.log('✅ script.js загружен');

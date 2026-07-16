@@ -255,6 +255,52 @@ body {
     border-color: rgba(255, 255, 255, 0.05);
 }
 
+
+/* ============================================
+   КНОПКА ПРАВИЛ С ИНДИКАТОРОМ
+   ============================================ */
+
+#rulesToggle {
+    transition: all 0.3s ease;
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+#rulesToggle .rules-indicator {
+    transition: all 0.3s ease;
+}
+
+/* Анимация при смене состояния */
+#rulesToggle .rules-indicator {
+    animation: rulesIndicatorPop 0.3s ease;
+}
+
+@keyframes rulesIndicatorPop {
+    0% {
+        transform: scale(0.5);
+        opacity: 0;
+    }
+    50% {
+        transform: scale(1.2);
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* При наведении */
+#rulesToggle:hover {
+    transform: scale(1.02);
+}
+
+#rulesToggle:active {
+    transform: scale(0.95);
+}
+
+
 /* ============================================
    ПРЕДУПРЕЖДЕНИЕ "НЕТ ХОДОВ ДЛЯ ОТМЕНЫ" (приглушённое)
    ============================================ */
