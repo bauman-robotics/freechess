@@ -127,6 +127,8 @@ function renderBoard() {
     // ВАЖНО: Перерисовываем стрелки после обновления доски
     // ============================================
     if (window.arrowSystem) {
+        // Синхронизируем состояние переворота с arrowSystem
+        window.arrowSystem.setFlipped(flipped);        
         // Небольшая задержка, чтобы DOM успел обновиться
         setTimeout(() => {
             window.arrowSystem.render();
@@ -135,6 +137,7 @@ function renderBoard() {
     
     console.log('✅ Доска отрендерена');
 }
+
 // === ОБРАБОТКА КЛИКА ===
 function onCellClick(row, col) {
     console.log(`🖱️ Клик по клетке ${row},${col}`);
@@ -424,16 +427,19 @@ window.socket.on('disconnect', () => {
 window.socket.on('joined', (data) => {
     console.log('📥 joined:', data);
     currentRoom = data.room_id;
-    window.currentRoom = currentRoom; // Синхронизируем
+    window.currentRoom = currentRoom;
     
     myColor = data.player.color;
     players = data.players;
     flipped = (myColor === 'black');
+    window.flipped = flipped; // <-- СИНХРОНИЗИРУЕМ
+    
     document.getElementById('roomDisplay').textContent = currentRoom;
     
     // Синхронизируем с arrowSystem
     if (window.arrowSystem) {
         window.arrowSystem.currentRoom = currentRoom;
+        window.arrowSystem.setFlipped(flipped); // <-- ДОБАВЬТЕ
     }
     
     // Синхронизируем с undoManager
@@ -451,10 +457,51 @@ window.socket.on('joined', (data) => {
     renderBoard();
     updateStatus();
     
+    // Обновляем ссылку
+    updateRoomLink();
+    
     if (typeof showToast === 'function') {
         showToast(`✅ Присоединились к комнате ${currentRoom}`, 'success');
     }
 });
+
+window.joinGame = function() {
+    currentRoom = document.getElementById('roomInput').value.trim();
+    window.currentRoom = currentRoom;
+    myName = document.getElementById('playerName').value.trim() || 'Игрок';
+    
+    if (!currentRoom) {
+        if (typeof showToast === 'function') {
+            showToast('⚠️ Введите ID комнаты', 'error');
+        }
+        return;
+    }
+    
+    document.getElementById('roomDisplay').textContent = currentRoom;
+    
+    // Синхронизируем с arrowSystem
+    if (window.arrowSystem) {
+        window.arrowSystem.currentRoom = currentRoom;
+    }
+    
+    // Синхронизируем с undoManager
+    if (window.undoManager) {
+        window.undoManager.setRoom(currentRoom);
+    }
+    
+    if (window.socket) {
+        window.socket.emit('join', { 
+            room_id: currentRoom, 
+            name: myName 
+        });
+        console.log(`🔗 Присоединение к комнате ${currentRoom} как ${myName}`);
+    } else {
+        console.error('❌ Socket не инициализирован');
+        if (typeof showToast === 'function') {
+            showToast('❌ Нет соединения с сервером', 'error');
+        }
+    }
+};
 
 window.socket.on('board_update', (data) => {
     console.log('📥 board_update:', {
@@ -616,6 +663,15 @@ function syncUndoManager() {
         console.warn('⚠️ undoManager не найден для синхронизации');
     }
 }
+
+function updateRoomLink() {
+    const roomId = document.getElementById('roomDisplay')?.textContent;
+    if (roomId && roomId !== '—') {
+        const link = window.getRoomLink ? window.getRoomLink(roomId) : `${window.location.origin}/?room=${roomId}`;
+        document.getElementById('linkDisplay').textContent = link;
+    }
+}
+
 
 // Вызываем синхронизацию после каждого обновления
 const originalBoardUpdate = window.socket?.on ? 
