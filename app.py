@@ -33,6 +33,12 @@ def initial_board():
         board.append(row)
     return board
 
+# Названия фигур для сервера
+PIECE_NAMES = {
+    'K': 'Король', 'Q': 'Ферзь', 'R': 'Ладья', 'B': 'Слон', 'N': 'Конь', 'P': 'Пешка',
+    'k': 'Король', 'q': 'Ферзь', 'r': 'Ладья', 'b': 'Слон', 'n': 'Конь', 'p': 'Пешка'
+}
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -45,6 +51,7 @@ def create_game():
         'players': [],
         'created_at': time.time(),
         'history': [],
+        'move_history': [],  # <-- ДЛЯ ХРАНЕНИЯ ИСТОРИИ В СТРОКАХ
         'arrows': []
     }
     print(f'✅ Комната создана: {room_id}')
@@ -59,7 +66,7 @@ def handle_disconnect():
     print(f'❌ Client disconnected: {request.sid}')
     for room_id, game in games.items():
         game['players'] = [p for p in game['players'] if p['id'] != request.sid]
-        
+
 @socketio.on('join')
 def handle_join(data):
     room_id = data.get('room_id')
@@ -84,13 +91,13 @@ def handle_join(data):
         'players': games[room_id]['players']
     })
 
-    # Отправляем текущее состояние доски, историю и СТРЕЛКИ
     emit('board_update', {
         'board': games[room_id]['board'],
         'players': games[room_id]['players'],
         'can_undo': len(games[room_id]['history']) > 0,
         'history_len': len(games[room_id]['history']),
-        'arrows': games[room_id].get('arrows', [])  # <-- ДОБАВЬТЕ ЭТУ СТРОКУ
+        'move_history': games[room_id].get('move_history', []),  # <-- ПЕРЕДАЁМ ИСТОРИЮ
+        'arrows': games[room_id].get('arrows', [])
     }, room=room_id)
 
     print(f'👤 {player_name} присоединился к комнате {room_id}')
@@ -113,6 +120,7 @@ def handle_move(data):
         emit('error', {'message': 'Нет фигуры на этой клетке'})
         return
 
+    # Сохраняем состояние доски ПЕРЕД ходом
     game['history'].append({
         'board': copy.deepcopy(board),
         'move': {
@@ -122,17 +130,26 @@ def handle_move(data):
         }
     })
 
+    # Перемещаем фигуру
     board[to_pos['row']][to_pos['col']] = piece
     board[from_pos['row']][from_pos['col']] = None
 
     game['board'] = board
-    
-    # НЕ ОЧИЩАЕМ СТРЕЛКИ - ОСТАВЛЯЕМ КАК ЕСТЬ
 
     history_len = len(game['history'])
     can_undo = history_len > 0
 
+    # Формируем строку хода для истории
+    from_square = f"{chr(65 + from_pos['col'])}{8 - from_pos['row']}"
+    to_square = f"{chr(65 + to_pos['col'])}{8 - to_pos['row']}"
+    piece_name = PIECE_NAMES.get(piece, piece)
+    move_str = f"{piece_name} {from_square}→{to_square}"
+    
+    # Добавляем в историю
+    game['move_history'].append(move_str)
+
     print(f'♟️ Ход: {piece} {from_pos["row"]},{from_pos["col"]} → {to_pos["row"]},{to_pos["col"]}')
+    print(f'📜 История: {len(game["move_history"])} ходов')
 
     emit('board_update', {
         'board': board,
@@ -144,7 +161,8 @@ def handle_move(data):
         'players': game['players'],
         'can_undo': can_undo,
         'history_len': history_len,
-        'arrows': game.get('arrows', [])  # ПЕРЕДАЁМ СТРЕЛКИ
+        'move_history': game['move_history'],  # <-- ПЕРЕДАЁМ ИСТОРИЮ
+        'arrows': game.get('arrows', [])
     }, room=room_id)
 
 @socketio.on('undo_move')
@@ -165,10 +183,14 @@ def handle_undo(data):
     previous_state = history.pop()
     game['board'] = previous_state['board']
     
-    # НЕ ОЧИЩАЕМ СТРЕЛКИ
+    # Удаляем последний ход из истории
+    if game['move_history']:
+        game['move_history'].pop()
 
     history_len = len(history)
     can_undo = history_len > 0
+
+    print(f'↩️ Отменён ход, осталось: {history_len}')
 
     emit('board_update', {
         'board': game['board'],
@@ -177,6 +199,7 @@ def handle_undo(data):
         'undo_move': previous_state['move'],
         'can_undo': can_undo,
         'history_len': history_len,
+        'move_history': game['move_history'],  # <-- ПЕРЕДАЁМ ОБНОВЛЁННУЮ ИСТОРИЮ
         'arrows': game.get('arrows', [])
     }, room=room_id)
 
@@ -189,7 +212,7 @@ def handle_reset(data):
     game = games[room_id]
     game['board'] = initial_board()
     game['history'] = []
-    # game['arrows'] = []  # НЕ ОЧИЩАЕМ СТРЕЛКИ ПРИ СБРОСЕ
+    game['move_history'] = []  # <-- ОЧИЩАЕМ ИСТОРИЮ
     
     emit('board_update', {
         'board': game['board'],
@@ -197,6 +220,7 @@ def handle_reset(data):
         'reset': True,
         'can_undo': False,
         'history_len': 0,
+        'move_history': [],
         'arrows': game.get('arrows', [])
     }, room=room_id)
 
@@ -210,7 +234,7 @@ def handle_clear(data):
     board = [[None for _ in range(8)] for _ in range(8)]
     game['board'] = board
     game['history'] = []
-    # game['arrows'] = []  # НЕ ОЧИЩАЕМ СТРЕЛКИ
+    game['move_history'] = []  # <-- ОЧИЩАЕМ ИСТОРИЮ
     
     emit('board_update', {
         'board': board,
@@ -218,6 +242,7 @@ def handle_clear(data):
         'clear': True,
         'can_undo': False,
         'history_len': 0,
+        'move_history': [],
         'arrows': game.get('arrows', [])
     }, room=room_id)
 

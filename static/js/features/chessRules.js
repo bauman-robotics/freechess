@@ -4,19 +4,19 @@ class ChessRules {
     constructor() {
         this.isEnabled = true;
         this.currentColor = 'white';
-        this.lastFEN = '';
+        this.moveHistory = [];
     }
     
-    // Установить цвет текущего игрока
     setCurrentColor(color) {
         this.currentColor = color;
+        console.log(`♟️ Текущий игрок: ${color}`);
     }
     
-    // Создать временную игру для проверки
     createTempGame(board) {
-        const game = new Chess();
-        const fen = this.boardToFEN(board);
         try {
+            const game = new Chess();
+            const fen = this.boardToFEN(board);
+            console.log('📋 Загружаем FEN:', fen);
             game.load(fen);
             return game;
         } catch (error) {
@@ -25,7 +25,6 @@ class ChessRules {
         }
     }
     
-    // Преобразовать доску в FEN (упрощённо, без учёта очереди хода)
     boardToFEN(board) {
         let fen = '';
         for (let r = 0; r < 8; r++) {
@@ -45,20 +44,19 @@ class ChessRules {
             if (empty > 0) fen += empty;
             if (r < 7) fen += '/';
         }
-        // Добавляем информацию о том, чей ход
+        // === ВАЖНО: Правильно определяем, чей ход ===
+        // По умолчанию белые, но если текущий игрок чёрные - передаём 'b'
         const turn = this.currentColor === 'white' ? 'w' : 'b';
         fen += ` ${turn} - - 0 1`;
         return fen;
     }
     
-    // Проверить ход
     isValidMove(fromRow, fromCol, toRow, toCol, board, color) {
         if (!this.isEnabled) return true;
         
         try {
             const playerColor = color || this.currentColor || 'white';
             
-            // Проверяем, что фигура принадлежит текущему игроку
             const piece = board[fromRow]?.[fromCol];
             if (!piece) return false;
             
@@ -70,17 +68,13 @@ class ChessRules {
                 return false;
             }
             
-            // Создаём временную игру
             const game = this.createTempGame(board);
             if (!game) return false;
             
             const from = this.toAlgebraic(fromRow, fromCol);
             const to = this.toAlgebraic(toRow, toCol);
             
-            // Получаем все легальные ходы
             const moves = game.moves({ verbose: true });
-            
-            // Проверяем, есть ли ход в списке легальных
             const isValid = moves.some(m => m.from === from && m.to === to);
             
             if (!isValid) {
@@ -95,7 +89,6 @@ class ChessRules {
         }
     }
     
-    // Получить все легальные ходы для клетки
     getLegalMoves(row, col, board, color) {
         if (!this.isEnabled) return [];
         
@@ -116,18 +109,24 @@ class ChessRules {
         }
     }
     
-    // Проверить шах
+    // === ПРОВЕРКА ШАХА (С ОТЛАДКОЙ) ===
     isInCheck(board) {
         if (!this.isEnabled) return false;
         try {
             const game = this.createTempGame(board);
-            return game ? game.in_check() : false;
+            if (!game) {
+                console.warn('⚠️ Не удалось создать игру');
+                return false;
+            }
+            const result = game.in_check();
+            console.log(`🔍 Проверка шаха: ${result} (ход ${game.turn() === 'w' ? 'белых' : 'чёрных'})`);
+            return result;
         } catch (error) {
+            console.error('❌ Ошибка проверки шаха:', error);
             return false;
         }
     }
     
-    // Проверить мат
     isCheckmate(board) {
         if (!this.isEnabled) return false;
         try {
@@ -138,7 +137,6 @@ class ChessRules {
         }
     }
     
-    // Проверить пат
     isStalemate(board) {
         if (!this.isEnabled) return false;
         try {
@@ -149,7 +147,6 @@ class ChessRules {
         }
     }
     
-    // Проверить ничью
     isDraw(board) {
         if (!this.isEnabled) return false;
         try {
@@ -160,19 +157,16 @@ class ChessRules {
         }
     }
     
-    // Конвертация: row, col → 'e4'
     toAlgebraic(row, col) {
         return String.fromCharCode(97 + col) + (8 - row);
     }
     
-    // Конвертация: 'e4' → { row, col }
     fromAlgebraic(square) {
         const col = square.charCodeAt(0) - 97;
         const row = 8 - parseInt(square[1]);
         return { row, col };
     }
     
-    // Установить режим (включить/выключить правила)
     setEnabled(enabled) {
         this.isEnabled = enabled;
         console.log(`♟️ Правила ${enabled ? 'включены' : 'выключены'}`);
@@ -182,7 +176,6 @@ class ChessRules {
     }
 }
 
-// Создаём глобальный экземпляр
 const chessRules = new ChessRules();
 window.chessRules = chessRules;
 

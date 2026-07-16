@@ -579,6 +579,53 @@ body {
     color: #1a1a2e;
 }
 
+
+/* ============================================
+   ПОДСВЕТКА КОРОЛЯ ПРИ ШАХЕ
+   ============================================ */
+
+.chess-cell.king-in-check {
+    position: relative;
+    z-index: 2;
+}
+
+/* Внешнее свечение вокруг короля */
+.chess-cell.king-in-check::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: -4px;
+    right: -4px;
+    bottom: -4px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 50, 50, 0.25) 0%, rgba(255, 50, 50, 0) 70%);
+    animation: kingCheckGlow 1.5s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* Сама клетка с королём - лёгкий красноватый оттенок */
+.chess-cell.king-in-check {
+    background: rgba(255, 50, 50, 0.08) !important;
+}
+
+/* Для тёмных клеток чуть ярче */
+.chess-cell.black.king-in-check {
+    background: rgba(255, 50, 50, 0.15) !important;
+}
+
+@keyframes kingCheckGlow {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 0.6;
+    }
+    50% {
+        transform: scale(1.08);
+        opacity: 1;
+    }
+}
+
+
 /* ============================================
    SCROLLBAR (полоса прокрутки)
    ============================================ */
