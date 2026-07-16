@@ -52,7 +52,8 @@ def create_game():
         'created_at': time.time(),
         'history': [],
         'move_history': [],  # <-- ДЛЯ ХРАНЕНИЯ ИСТОРИИ В СТРОКАХ
-        'arrows': []
+        'arrows': [],
+        'rules_enabled': True
     }
     print(f'✅ Комната создана: {room_id}')
     return jsonify({'room_id': room_id})
@@ -97,7 +98,8 @@ def handle_join(data):
         'can_undo': len(games[room_id]['history']) > 0,
         'history_len': len(games[room_id]['history']),
         'move_history': games[room_id].get('move_history', []),  # <-- ПЕРЕДАЁМ ИСТОРИЮ
-        'arrows': games[room_id].get('arrows', [])
+        'arrows': games[room_id].get('arrows', []),
+        'rules_enabled': games[room_id].get('rules_enabled', True)
     }, room=room_id)
 
     print(f'👤 {player_name} присоединился к комнате {room_id}')
@@ -223,6 +225,26 @@ def handle_reset(data):
         'move_history': [],
         'arrows': game.get('arrows', [])
     }, room=room_id)
+
+@socketio.on('toggle_rules')
+def handle_toggle_rules(data):
+    room_id = data.get('room_id')
+    
+    if room_id not in games:
+        emit('error', {'message': 'Комната не найдена'})
+        return
+    
+    game = games[room_id]
+    # Переключаем состояние
+    game['rules_enabled'] = not game['rules_enabled']
+    
+    # Отправляем всем в комнате
+    emit('rules_state', {
+        'room_id': room_id,
+        'enabled': game['rules_enabled']
+    }, room=room_id)
+    
+    print(f'♟️ Правила в комнате {room_id}: {"включены" if game["rules_enabled"] else "выключены"}')
 
 @socketio.on('clear_board')
 def handle_clear(data):

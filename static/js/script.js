@@ -599,6 +599,14 @@ window.socket.on('joined', (data) => {
         window.undoManager.setRoom(currentRoom);
     }
     
+
+    // Синхронизируем правила при присоединении
+    if (data.rules_enabled !== undefined && window.chessRules) {
+        window.chessRules.isEnabled = data.rules_enabled;
+        setTimeout(updateRulesButton, 100);
+        console.log(`♟️ Правила синхронизированы при присоединении: ${data.rules_enabled ? 'включены' : 'выключены'}`);
+    }
+
     // Сбрасываем историю
     moveHistory = [];
     canUndo = false;
@@ -614,6 +622,17 @@ window.socket.on('joined', (data) => {
     
     if (typeof showToast === 'function') {
         showToast(`✅ Присоединились к комнате ${currentRoom}`, 'success');
+    }
+});
+
+// === ПОЛУЧЕНИЕ ОБНОВЛЕНИЯ ПРАВИЛ ===
+window.socket.on('rules_state', (data) => {
+    console.log('📥 Получено обновление правил:', data);
+    if (data.enabled !== undefined) {
+        syncRulesFromServer(data.enabled);
+        if (typeof showToast === 'function') {
+            showToast(`♟️ Правила ${data.enabled ? 'включены' : 'выключены'}`, 'info');
+        }
     }
 });
 
@@ -696,6 +715,16 @@ window.socket.on('board_update', (data) => {
         updateHistoryDisplay();
     }
     
+
+    // === СИНХРОНИЗАЦИЯ ПРАВИЛ ===
+    if (data.rules_enabled !== undefined) {
+        if (window.chessRules) {
+            window.chessRules.isEnabled = data.rules_enabled;
+            updateRulesButton();
+            console.log(`♟️ Правила синхронизированы: ${data.rules_enabled ? 'включены' : 'выключены'}`);
+        }
+    }
+
     // === ОБНОВЛЕНИЕ СТРЕЛОК ===
     if (data.arrows !== undefined) {
         if (window.arrowSystem) {
@@ -856,12 +885,10 @@ function updateRulesButton() {
     const btnHeight = btn.offsetHeight || 30;
     const dotSize = Math.max(10, Math.round(btnHeight / 3));
     
-    // Создаём индикатор
     const indicator = document.createElement('span');
     indicator.className = 'rules-indicator';
     
     if (isEnabled) {
-        // Зелёный закрашенный кружок
         indicator.style.cssText = `
             display: inline-block;
             width: ${dotSize}px;
@@ -879,7 +906,6 @@ function updateRulesButton() {
         btn.style.borderColor = '#28a745';
         btn.style.color = '#28a745';
     } else {
-        // Серый незакрашенный кружок (только контур)
         indicator.style.cssText = `
             display: inline-block;
             width: ${dotSize}px;
@@ -897,10 +923,60 @@ function updateRulesButton() {
         btn.style.color = '#6c757d';
     }
     
-    // Очищаем кнопку и добавляем текст + индикатор
     btn.innerHTML = '';
     btn.appendChild(document.createTextNode('♟️ Правила '));
     btn.appendChild(indicator);
+}
+
+// === КНОПКА ПРАВИЛ ===
+window.toggleRules = function() {
+    if (!window.chessRules) {
+        console.warn('⚠️ chessRules не найден');
+        if (typeof showToast === 'function') {
+            showToast('⚠️ Система правил не загружена', 'error');
+        }
+        return;
+    }
+    
+    // Переключаем состояние локально
+    window.chessRules.setEnabled(!window.chessRules.isEnabled);
+    updateRulesButton();
+    
+    // Отправляем на сервер
+    if (window.socket && window.currentRoom) {
+        window.socket.emit('toggle_rules', {
+            room_id: window.currentRoom
+        });
+        console.log('📤 Отправка состояния правил на сервер');
+    }
+    
+    // Обновляем статус
+    if (typeof updateStatus === 'function') {
+        updateStatus();
+    }
+    
+    if (typeof showToast === 'function') {
+        showToast(window.chessRules.isEnabled ? '✅ Правила включены' : '⛔ Правила выключены', 'info');
+    }
+};
+
+// === СИНХРОНИЗАЦИЯ ПРАВИЛ С СЕРВЕРА ===
+function syncRulesFromServer(enabled) {
+    if (!window.chessRules) {
+        console.warn('⚠️ chessRules не найден для синхронизации');
+        return;
+    }
+    
+    // Обновляем состояние
+    window.chessRules.setEnabled(enabled);
+    updateRulesButton();
+    
+    // Обновляем статус
+    if (typeof updateStatus === 'function') {
+        updateStatus();
+    }
+    
+    console.log(`♟️ Правила синхронизированы с сервера: ${enabled ? 'включены' : 'выключены'}`);
 }
 
 // === ИНИЦИАЛИЗАЦИЯ КНОПКИ ПРАВИЛ ===
