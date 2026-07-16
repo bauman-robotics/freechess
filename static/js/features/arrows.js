@@ -48,6 +48,7 @@ class ArrowSystem {
         
         this.setupEventListeners();
         this.setupSocketEvents();
+        this.updateColorButton(); 
         console.log('🎯 Система стрелок инициализирована (режим всегда включён)');
     }
     
@@ -66,11 +67,13 @@ class ArrowSystem {
         document.querySelectorAll('.arrow-color-btn').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.color === color);
         });
+        this.updateColorButton(); // <-- ДОБАВЬТЕ
     }
-    
+
     nextColor() {
         this.colorIndex = (this.colorIndex + 1) % this.colors.length;
         this.setColor(this.colors[this.colorIndex]);
+        this.updateColorButton(); // <-- ДОБАВЬТЕ
         if (typeof showToast === 'function') {
             showToast(`🎨 Цвет стрелки изменён`, 'info');
         }
@@ -438,6 +441,38 @@ class ArrowSystem {
     setFlipped(flipped) {
         this.flipped = flipped;
         this.render();
+    }
+
+
+    updateColorButton() {
+        const btn = document.getElementById('colorBtn');
+        if (!btn) return;
+        
+        // Получаем высоту кнопки
+        const btnHeight = btn.offsetHeight || 30;
+        const dotSize = Math.max(10, Math.round(btnHeight / 3));
+        
+        // Создаём индикатор цвета (точка)
+        const indicator = document.createElement('span');
+        indicator.className = 'color-indicator';
+        indicator.style.cssText = `
+            display: inline-block;
+            width: ${dotSize}px;
+            height: ${dotSize}px;
+            border-radius: 50%;
+            background: ${this.currentColor};
+            border: 2px solid rgba(255,255,255,0.4);
+            margin-left: 6px;
+            vertical-align: middle;
+            flex-shrink: 0;
+            transition: background 0.3s ease, transform 0.2s ease;
+            box-shadow: 0 0 8px ${this.currentColor}44;
+        `;
+        
+        // Очищаем кнопку и добавляем текст + индикатор
+        btn.innerHTML = '';
+        btn.appendChild(document.createTextNode('🎨 Цвет '));
+        btn.appendChild(indicator);
     }
 
     destroy() {
