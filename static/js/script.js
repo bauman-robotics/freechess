@@ -170,6 +170,20 @@ function onCellClick(row, col) {
     const fromPiece = board[fromRow]?.[fromCol];
 
     if (fromPiece) {
+        // === ПРОВЕРКА ПРАВИЛ ===
+        if (window.chessRules && window.chessRules.isEnabled) {
+            // Передаём цвет текущего игрока
+            const isValid = window.chessRules.isValidMove(fromRow, fromCol, row, col, board, myColor);
+            if (!isValid) {
+                if (typeof showToast === 'function') {
+                    showToast('❌ Недопустимый ход!', 'error');
+                }
+                selectedCell = null;
+                renderBoard();
+                return;
+            }
+        }
+
         board[row][col] = fromPiece;
         board[fromRow][fromCol] = null;
         lastMove.from = { row: fromRow, col: fromCol };
@@ -215,6 +229,29 @@ function updateStatus() {
         setStatus(`⏳ Ожидание игроков... (${playerCount}/2)`, 'info-msg');
     } else {
         setStatus('🎮 Игра активна! Перемещайте фигуры', 'success');
+    }
+
+    if (window.chessRules && window.chessRules.isEnabled && board) {
+        // Обновляем цвет в правилах
+        window.chessRules.setCurrentColor(myColor);
+        
+        if (window.chessRules.isCheckmate(board)) {
+            setStatus('♛ МАТ! Игра окончена!', 'success');
+            return;
+        }
+        if (window.chessRules.isStalemate(board)) {
+            setStatus('🤝 ПАТ! Ничья!', 'info');
+            return;
+        }
+        if (window.chessRules.isInCheck(board)) {
+            const color = myColor === 'white' ? 'Белые' : 'Чёрные';
+            setStatus(`⚠️ ${color} под шахом!`, 'warning');
+            return;
+        }
+        if (window.chessRules.isDraw(board)) {
+            setStatus('🤝 Ничья!', 'info');
+            return;
+        }
     }
 }
 
@@ -624,6 +661,19 @@ window.socket.on('error', (data) => {
     showToast(`❌ ${data.message}`, 'error');
     setStatus(`❌ ${data.message}`, 'error');
 });
+
+
+window.toggleRules = function() {
+    if (window.chessRules) {
+        window.chessRules.setEnabled(!window.chessRules.isEnabled);
+        const btn = document.getElementById('rulesToggle');
+        if (btn) {
+            btn.textContent = window.chessRules.isEnabled ? '♟️ Правила (вкл)' : '♟️ Правила (выкл)';
+            btn.style.background = window.chessRules.isEnabled ? '#28a745' : '#6c757d';
+        }
+        showToast(window.chessRules.isEnabled ? '✅ Правила включены' : '⛔ Правила выключены', 'info');
+    }
+};
 
 // === ИНИЦИАЛИЗАЦИЯ ===
 console.log('🚀 Загрузка script.js');

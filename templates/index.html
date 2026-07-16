@@ -81,6 +81,14 @@
                     <button onclick="window.nextArrowColor()" class="secondary" id="colorBtn" title="Сменить цвет стрелки">
                         🎨 Цвет
                     </button>
+
+                    <!-- Кнопка включения/выключения правил -->
+                    <div class="chess-controls" style="margin-top: 10px;">
+                        <button onclick="window.toggleRules()" class="secondary" id="rulesToggle">
+                            ♟️ Правила
+                        </button>
+                    </div>
+
                 </div>
 
                 <!-- Палитра цветов для стрелок -->
@@ -90,6 +98,8 @@
                 <div class="arrow-hint">
                     💡 Зажмите <span class="key">ПКМ</span> и проведите по доске, чтобы нарисовать стрелку
                 </div>
+
+
 
             </div>
             <!-- ===== КОНЕЦ ЛЕВОЙ ЧАСТИ ===== -->
@@ -182,17 +192,23 @@
     <!-- ============================================ -->
     <!-- СКРИПТЫ -->
     <!-- ============================================ -->
-    
+
     <!-- Socket.IO -->
     <script src="https://cdn.socket.io/4.7.0/socket.io.min.js"></script>
-    
+
+    <!-- Шахматная библиотека - ДОЛЖНА БЫТЬ ПЕРВОЙ -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.2/chess.min.js"></script>
+
+    <!-- Модуль правил - ЗАГРУЖАЕТСЯ ПОСЛЕ chess.js -->
+    <script src="{{ url_for('static', filename='js/features/chessRules.js') }}?v=19"></script>
+
     <!-- Шахматные фигуры (SVG) -->
     <script src="{{ url_for('static', filename='js/pieces.js') }}?v=15" charset="utf-8"></script>
-    
+        
     <!-- ============================================ -->
     <!-- ОСНОВНОЙ КОД (script.js) -->
     <!-- ============================================ -->
-    <script src="{{ url_for('static', filename='js/script.js') }}?v=16" charset="utf-8"></script>
+    <script src="{{ url_for('static', filename='js/script.js') }}?v=19" charset="utf-8"></script>
     
     <!-- ============================================ -->
     <!-- МОДУЛИ -->
