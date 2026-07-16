@@ -10,16 +10,16 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.2/css/all.min.css" />
     
     <!-- Основные стили -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=13">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=14">
     
     <!-- Стили для стрелок -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/arrows.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/arrows.css') }}?v=14">
     
     <!-- Стили для отмены ходов -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/undo.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/undo.css') }}?v=14">
 
     <!-- Стили для подсветки ходов -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/move-highlight.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/move-highlight.css') }}?v=14">
 
 </head>
 <body>
@@ -64,7 +64,7 @@
                 <!-- Кнопки управления доской -->
                 <div class="chess-controls" style="margin-top: 10px;">
                     <button onclick="window.resetBoard()" class="secondary" title="Сбросить доску в начальную позицию">🔄 Сброс</button>
-                    <button onclick="window.clearBoard()" class="danger" title="Удалить все фигуры с доски">🗑️ Очистить</button>
+                   <!--  <button onclick="window.clearBoard()" class="danger" title="Удалить все фигуры с доски">🗑️ Очистить</button>  -->
                     <button onclick="window.flipBoard()" class="secondary" title="Перевернуть доску">🔄 Перевернуть</button>
                     <button onclick="window.undoMove()" class="undo" id="undoBtn" disabled title="Нет ходов для отмены">
                         ↩️ Вернуть ход
@@ -77,9 +77,6 @@
                 <div class="chess-controls" style="margin-top: 10px; flex-wrap: wrap; justify-content: center;">
                     <button onclick="window.clearArrows()" class="secondary" title="Удалить все стрелки">
                         🧹 Убрать стрелки
-                    </button>
-                    <button onclick="window.toggleArrowMode()" class="secondary" id="arrowToggle">
-                        📐 Режим стрелок
                     </button>
                     <button onclick="window.nextArrowColor()" class="secondary" title="Сменить цвет стрелки">
                         🎨 Цвет

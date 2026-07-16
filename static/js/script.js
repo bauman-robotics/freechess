@@ -118,12 +118,23 @@ function renderBoard() {
             boardEl.appendChild(cell);
         }
     }
+    
     updateStatus();
     updateSidebar();
     updateUndoButton();
+    
+    // ============================================
+    // ВАЖНО: Перерисовываем стрелки после обновления доски
+    // ============================================
+    if (window.arrowSystem) {
+        // Небольшая задержка, чтобы DOM успел обновиться
+        setTimeout(() => {
+            window.arrowSystem.render();
+        }, 10);
+    }
+    
     console.log('✅ Доска отрендерена');
 }
-
 // === ОБРАБОТКА КЛИКА ===
 function onCellClick(row, col) {
     console.log(`🖱️ Клик по клетке ${row},${col}`);

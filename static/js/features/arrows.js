@@ -6,9 +6,11 @@ class ArrowSystem {
     constructor(socketManager) {
         this.socket = socketManager;
         this.arrows = [];
-        this.arrowMode = false;
-        this.currentColor = '#ff0000';
-        this.colors = ['#ff0000', '#00ff00', '#ffff00', '#00aaff', '#ff00ff', '#ff8800', '#ff1493', '#00ffcc'];
+        this.arrowMode = true; // ВСЕГДА ВКЛЮЧЕН
+        //this.currentColor = '#00ff00'; // ЗЕЛЁНЫЙ ПО УМОЛЧАНИЮ
+        this.currentColor = '#00aa44';  // Тёмно-зелёный/изумрудный
+        //this.colors = ['#00ff00', '#ff0000', '#ffff00', '#00aaff', '#ff00ff', '#ff8800', '#ff1493', '#00ffcc'];
+        this.colors = ['#00aa44', '#ff0000', '#ffff00', '#00aaff', '#ff00ff', '#ff8800', '#ff1493', '#00ffcc'];
         this.colorIndex = 0;
         this.isDrawing = false;
         this.startCell = null;
@@ -47,34 +49,16 @@ class ArrowSystem {
         
         this.setupEventListeners();
         this.setupSocketEvents();
-        console.log('🎯 Система стрелок инициализирована');
+        console.log('🎯 Система стрелок инициализирована (режим всегда включён)');
     }
     
     // === УПРАВЛЕНИЕ РЕЖИМОМ ===
     toggleMode() {
-        this.arrowMode = !this.arrowMode;
-        const btn = document.getElementById('arrowToggle');
-        if (btn) {
-            btn.classList.toggle('active');
-            btn.textContent = this.arrowMode ? '📐 Рисование (вкл)' : '📐 Режим стрелок';
-            if (this.arrowMode) {
-                btn.style.background = '#ffd700';
-                btn.style.color = '#1a1a2e';
-            } else {
-                btn.style.background = '';
-                btn.style.color = '';
-            }
-        }
-        
-        const picker = document.getElementById('arrowColorPicker');
-        if (picker) {
-            picker.style.display = this.arrowMode ? 'flex' : 'none';
-        }
-        
+        // Режим всегда включён, просто возвращаем true
+        this.arrowMode = true;
         if (typeof showToast === 'function') {
-            showToast(this.arrowMode ? '📐 Режим рисования стрелок включён' : '📐 Режим рисования стрелок выключен', 'info');
+            showToast('📐 Режим стрелок всегда включён', 'info');
         }
-        
         return this.arrowMode;
     }
     
@@ -127,14 +111,12 @@ class ArrowSystem {
     }
     
     onContextMenu(e) {
-        if (this.arrowMode) {
-            e.preventDefault();
-            return false;
-        }
+        // Режим всегда включён, поэтому всегда блокируем контекстное меню на доске
+        e.preventDefault();
+        return false;
     }
     
     onMouseDown(e) {
-        if (!this.arrowMode) return;
         if (e.button !== 2) return;
         
         const cell = e.target.closest('.chess-cell');
@@ -203,13 +185,6 @@ class ArrowSystem {
             if (fromRow !== toRow || fromCol !== toCol) {
                 const roomId = window.currentRoom || document.getElementById('roomDisplay')?.textContent;
                 
-                console.log('📤 Отправка стрелки:', {
-                    room_id: roomId,
-                    from: { row: fromRow, col: fromCol },
-                    to: { row: toRow, col: toCol },
-                    color: this.currentColor
-                });
-                
                 if (roomId && roomId !== '—') {
                     this.socket.emit('draw_arrow', {
                         room_id: roomId,
@@ -217,14 +192,7 @@ class ArrowSystem {
                         to: { row: toRow, col: toCol },
                         color: this.currentColor
                     });
-                } else {
-                    console.warn('⚠️ Нет комнаты для отправки стрелки');
-                    if (typeof showToast === 'function') {
-                        showToast('⚠️ Сначала присоединитесь к игре', 'info');
-                    }
                 }
-            } else {
-                console.log('ℹ️ Стрелка нулевая (начало = конец)');
             }
         }
         
@@ -301,6 +269,7 @@ class ArrowSystem {
         const lineWidth = 5;
         
         // Свечение
+        /*
         const glow = document.createElementNS('http://www.w3.org/2000/svg', 'line');
         glow.setAttribute('x1', fromX);
         glow.setAttribute('y1', fromY);
@@ -312,6 +281,7 @@ class ArrowSystem {
         glow.setAttribute('opacity', '0.15');
         glow.style.filter = 'blur(8px)';
         svg.appendChild(glow);
+        */
         
         // Основная линия
         const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -345,7 +315,6 @@ class ArrowSystem {
         document.querySelectorAll('.board-arrows').forEach(el => el.remove());
         
         if (!this.arrows || this.arrows.length === 0) {
-            console.log('ℹ️ Нет стрелок для отображения');
             return;
         }
         
@@ -363,39 +332,28 @@ class ArrowSystem {
             svg.setAttribute('class', 'board-arrows');
             svg.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10;';
             
-            this.arrows.forEach((arrow, index) => {
-                try {
-                    const fromX = (arrow.from.col + 0.5) * cellSize;
-                    const fromY = (arrow.from.row + 0.5) * cellSize;
-                    const toX = (arrow.to.col + 0.5) * cellSize;
-                    const toY = (arrow.to.row + 0.5) * cellSize;
-                    this.drawArrow(svg, fromX, fromY, toX, toY, arrow.color);
-                } catch (err) {
-                    console.warn(`⚠️ Ошибка при отрисовке стрелки ${index}:`, err);
-                }
+            this.arrows.forEach((arrow) => {
+                const fromX = (arrow.from.col + 0.5) * cellSize;
+                const fromY = (arrow.from.row + 0.5) * cellSize;
+                const toX = (arrow.to.col + 0.5) * cellSize;
+                const toY = (arrow.to.row + 0.5) * cellSize;
+                this.drawArrow(svg, fromX, fromY, toX, toY, arrow.color);
             });
             
             boardEl.style.position = 'relative';
             boardEl.appendChild(svg);
-            console.log(`✅ Отрисовано ${this.arrows.length} стрелок`);
         } catch (error) {
             console.error('❌ Ошибка при рендере стрелок:', error);
         }
     }
     
-    // === SOCKET СОБЫТИЯ (РАБОЧАЯ ВЕРСИЯ ИЗ КОНСОЛИ) ===
+    // === SOCKET СОБЫТИЯ ===
     setupSocketEvents() {
-        console.log('🔧 Настройка socket событий для стрелок...');
-        
-        // Удаляем все старые обработчики
         this.socket.off('arrow_drawn');
         this.socket.off('arrow_removed');
         this.socket.off('arrows_cleared');
         
-        // Обработчик получения стрелки (точно такой же как в консоли)
         this.socket.on('arrow_drawn', (data) => {
-            console.log('📥 arrow_drawn ПОЛУЧЕН (из файла):', data);
-            
             if (!window.arrowSystem) {
                 console.warn('⚠️ ArrowSystem не найден');
                 return;
@@ -403,29 +361,28 @@ class ArrowSystem {
             
             const exists = window.arrowSystem.arrows.some(a => a.id === data.arrow.id);
             if (exists) {
-                console.log('ℹ️ Стрелка уже существует');
                 return;
             }
             
             window.arrowSystem.arrows.push(data.arrow);
-            console.log('✅ Стрелка добавлена, всего:', window.arrowSystem.arrows.length);
             window.arrowSystem.render();
+            
+            if (data.arrow.player_id && data.arrow.player_id !== this.socket.id) {
+                if (typeof showToast === 'function') {
+                    showToast('📐 Соперник нарисовал стрелку', 'info');
+                }
+            }
         });
         
         this.socket.on('arrow_removed', (data) => {
-            console.log('🗑️ arrow_removed:', data);
             this.arrows = this.arrows.filter(a => a.id !== data.arrow_id);
             this.render();
         });
         
         this.socket.on('arrows_cleared', (data) => {
-            console.log('🧹 arrows_cleared:', data);
             this.arrows = [];
             this.render();
         });
-        
-        console.log('✅ Socket события для стрелок настроены');
-        console.log('Обработчик arrow_drawn зарегистрирован:', !!this.socket._events?.['arrow_drawn']);
     }
     
     // === ОБЩЕДОСТУПНЫЕ МЕТОДЫ ===
@@ -484,7 +441,7 @@ function initArrowSystem(socketManager) {
             console.warn('⚠️ ArrowSystem не инициализирован');
         };
         
-        console.log('✅ ArrowSystem создан с глобальными функциями');
+        console.log('✅ ArrowSystem создан (режим всегда включён, зелёные стрелки)');
     }
     return arrowSystem;
 }
@@ -502,9 +459,4 @@ if (document.readyState === 'loading') {
     }
 }
 
-// Экспорт для модульной системы
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { ArrowSystem, initArrowSystem, arrowSystem };
-}
-
-console.log('📐 Модуль arrows.js загружен');
+console.log('📐 Модуль arrows.js загружен (зелёные стрелки, режим всегда включён)');
