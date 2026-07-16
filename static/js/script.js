@@ -208,34 +208,100 @@ function onCellClick(row, col) {
     const fromPiece = board[fromRow]?.[fromCol];
 
     if (fromPiece) {
+        // === ОТЛАДКА РОКИРОВКИ ===
+        console.log('🔍 Отладка рокировки:');
+        console.log('  myColor:', myColor);
+        console.log('  fromRow:', fromRow, 'fromCol:', fromCol);
+        console.log('  toRow:', row, 'toCol:', col);
+        console.log('  fromPiece:', fromPiece);
+        console.log('  isCastling?', (fromPiece === 'K' || fromPiece === 'k') && Math.abs(col - fromCol) === 2);
+        
+        let moveStr = '';
+        const isCastlingMove = (fromPiece === 'K' || fromPiece === 'k') && Math.abs(col - fromCol) === 2;
+        
         // === ПРОВЕРКА ПРАВИЛ ===
         if (window.chessRules && window.chessRules.isEnabled) {
-            const isValid = window.chessRules.isValidMove(fromRow, fromCol, row, col, board, myColor);
-            if (!isValid) {
-                if (typeof showToast === 'function') {
-                    showToast('❌ Недопустимый ход!', 'error');
+            if (isCastlingMove) {
+                console.log('♟️ Обнаружена рокировка!');
+                // Проверяем рокировку вручную
+                const isValid = window.chessRules.isValidCastling(fromRow, fromCol, row, col, board, myColor);
+                console.log('  Рокировка валидна:', isValid);
+                if (!isValid) {
+                    if (typeof showToast === 'function') {
+                        showToast('❌ Недопустимая рокировка!', 'error');
+                    }
+                    selectedCell = null;
+                    renderBoard();
+                    return;
                 }
+                
+                // Отправляем рокировку на сервер
+                if (window.socket) {
+                    window.socket.emit('move', {
+                        room_id: currentRoom,
+                        from: { row: fromRow, col: fromCol },
+                        to: { row: row, col: col },
+                        isCastling: true
+                    });
+                }
+                
+                const fromName = PIECE_NAMES[fromPiece] || fromPiece;
+                const fromSquare = `${String.fromCharCode(65 + fromCol)}${8 - fromRow}`;
+                const toSquare = `${String.fromCharCode(65 + col)}${8 - row}`;
+                moveStr = (col > fromCol) ? 'O-O' : 'O-O-O';
+                
+                moveHistory.push(moveStr);
+                window.moveHistory = moveHistory;
+                console.log('📜 Ход добавлен в историю:', moveStr, 'Всего:', moveHistory.length);
+                
+                document.getElementById('lastMove').textContent = moveStr;
+                setStatus(`Ход: ${moveStr}`, 'success');
+                
                 selectedCell = null;
                 renderBoard();
                 return;
+            } else {
+                // Обычная проверка хода
+                const isValid = window.chessRules.isValidMove(fromRow, fromCol, row, col, board, myColor);
+                if (!isValid) {
+                    if (typeof showToast === 'function') {
+                        showToast('❌ Недопустимый ход!', 'error');
+                    }
+                    selectedCell = null;
+                    renderBoard();
+                    return;
+                }
+                
+                // Выполняем ход через chess.js
+                const newBoard = window.chessRules.makeMove(fromRow, fromCol, row, col, board, myColor);
+                if (newBoard) {
+                    board = newBoard;
+                } else {
+                    // Если не удалось выполнить ход через chess.js
+                    board[row][col] = fromPiece;
+                    board[fromRow][fromCol] = null;
+                }
+                
+                const fromName = PIECE_NAMES[fromPiece] || fromPiece;
+                const fromSquare = `${String.fromCharCode(65 + fromCol)}${8 - fromRow}`;
+                const toSquare = `${String.fromCharCode(65 + col)}${8 - row}`;
+                moveStr = `${fromName} ${fromSquare}→${toSquare}`;
             }
+        } else {
+            // Если правила выключены - просто перемещаем
+            board[row][col] = fromPiece;
+            board[fromRow][fromCol] = null;
+            const fromName = PIECE_NAMES[fromPiece] || fromPiece;
+            const fromSquare = `${String.fromCharCode(65 + fromCol)}${8 - fromRow}`;
+            const toSquare = `${String.fromCharCode(65 + col)}${8 - row}`;
+            moveStr = `${fromName} ${fromSquare}→${toSquare}`;
         }
-
-        board[row][col] = fromPiece;
-        board[fromRow][fromCol] = null;
+        
         lastMove.from = { row: fromRow, col: fromCol };
         lastMove.to = { row: row, col: col };
-
-        const fromName = PIECE_NAMES[fromPiece] || fromPiece;
-        const fromSquare = `${String.fromCharCode(65 + fromCol)}${8 - fromRow}`;
-        const toSquare = `${String.fromCharCode(65 + col)}${8 - row}`;
-        
-        // === ФОРМИРУЕМ СТРОКУ ХОДА ===
-        let moveStr = `${fromName} ${fromSquare}→${toSquare}`;
         
         // Проверяем шах/мат после хода
-        if (window.chessRules && window.chessRules.isEnabled) {
-            // Создаём копию доски для проверки
+        if (moveStr && window.chessRules && window.chessRules.isEnabled) {
             const boardCopy = board.map(row => [...row]);
             if (window.chessRules.isCheckmate(boardCopy)) {
                 moveStr += ' #';
@@ -244,18 +310,21 @@ function onCellClick(row, col) {
             }
         }
         
-        moveHistory.push(moveStr);
-        window.moveHistory = moveHistory; // Синхронизируем с глобальной переменной
-        console.log('📜 Ход добавлен в историю:', moveStr, 'Всего:', moveHistory.length);
-        
-        document.getElementById('lastMove').textContent = moveStr;
-        setStatus(`Ход: ${moveStr}`, 'success');
+        if (moveStr) {
+            moveHistory.push(moveStr);
+            window.moveHistory = moveHistory;
+            console.log('📜 Ход добавлен в историю:', moveStr, 'Всего:', moveHistory.length);
+            
+            document.getElementById('lastMove').textContent = moveStr;
+            setStatus(`Ход: ${moveStr}`, 'success');
+        }
 
-        if (window.socket) {
+        if (window.socket && !isCastlingMove) {
             window.socket.emit('move', {
                 room_id: currentRoom,
                 from: { row: fromRow, col: fromCol },
-                to: { row: row, col: col }
+                to: { row: row, col: col },
+                isCastling: false
             });
         }
 
@@ -714,14 +783,30 @@ window.socket.on('board_update', (data) => {
         moveHistory = data.move_history;
         window.moveHistory = moveHistory;
         console.log('📜 История синхронизирована с сервера:', moveHistory.length);
-        
-        // ПРИНУДИТЕЛЬНО ОБНОВЛЯЕМ ИСТОРИЮ В UI
         updateHistoryDisplay();
     } else if (data.move && !data.undo) {
         const pieceName = PIECE_NAMES[data.move.piece] || data.move.piece;
         const fromSquare = `${String.fromCharCode(65 + data.move.from.col)}${8 - data.move.from.row}`;
         const toSquare = `${String.fromCharCode(65 + data.move.to.col)}${8 - data.move.to.row}`;
-        let moveStr = `${pieceName} ${fromSquare}→${toSquare}`;
+        
+        // === ПРОВЕРКА НА РОКИРОВКУ ===
+        let moveStr;
+        const piece = data.move.piece;
+        const fromCol = data.move.from.col;
+        const toCol = data.move.to.col;
+        
+        // Проверяем, что это король и он переместился на 2 клетки по горизонтали
+        if ((piece === 'K' || piece === 'k') && Math.abs(toCol - fromCol) === 2) {
+            // Это рокировка
+            if (toCol > fromCol) {
+                moveStr = 'O-O';  // Короткая рокировка
+            } else {
+                moveStr = 'O-O-O'; // Длинная рокировка
+            }
+        } else {
+            moveStr = `${pieceName} ${fromSquare}→${toSquare}`;
+        }
+        
         if (window.chessRules && window.chessRules.isEnabled) {
             if (window.chessRules.isCheckmate(board)) {
                 moveStr += ' #';
@@ -733,11 +818,9 @@ window.socket.on('board_update', (data) => {
         window.moveHistory = moveHistory;
         console.log('📜 Ход добавлен локально:', moveStr);
         
-        // ПРИНУДИТЕЛЬНО ОБНОВЛЯЕМ ИСТОРИЮ В UI
         updateHistoryDisplay();
     }
     
-
     // === СИНХРОНИЗАЦИЯ ПРАВИЛ ===
     if (data.rules_enabled !== undefined) {
         if (window.chessRules) {
@@ -762,7 +845,26 @@ window.socket.on('board_update', (data) => {
         const pieceName = PIECE_NAMES[data.move.piece] || data.move.piece;
         const fromSquare = `${String.fromCharCode(65 + data.move.from.col)}${8 - data.move.from.row}`;
         const toSquare = `${String.fromCharCode(65 + data.move.to.col)}${8 - data.move.to.row}`;
-        let moveStr = `${pieceName} ${fromSquare}→${toSquare}`;
+        
+        // === ПРОВЕРКА НА РОКИРОВКУ ===
+        let moveStr;
+        const piece = data.move.piece;
+        const fromCol = data.move.from.col;
+        const toCol = data.move.to.col;
+        
+        // Проверяем, что это король и он переместился на 2 клетки по горизонтали
+        if ((piece === 'K' || piece === 'k') && Math.abs(toCol - fromCol) === 2) {
+            // Это рокировка
+            if (toCol > fromCol) {
+                moveStr = 'O-O';  // Короткая рокировка
+            } else {
+                moveStr = 'O-O-O'; // Длинная рокировка
+            }
+        } else {
+            moveStr = `${pieceName} ${fromSquare}→${toSquare}`;
+        }
+        
+        // Добавляем шах/мат
         if (window.chessRules && window.chessRules.isEnabled) {
             if (window.chessRules.isCheckmate(board)) {
                 moveStr += ' #';
@@ -788,10 +890,7 @@ window.socket.on('board_update', (data) => {
     // === РЕНДЕРИНГ ===
     renderBoard();
     updateStatus();
-    updateSidebar(); // <-- ЭТОТ ВЫЗОВ УЖЕ ЕСТЬ
-    
-    // === ДОПОЛНИТЕЛЬНОЕ ОБНОВЛЕНИЕ ИСТОРИИ ===
-    // Вызываем ещё раз для надежности
+    updateSidebar();
     updateHistoryDisplay();
     
     // === ОБРАБОТКА ОТМЕНЫ ===
@@ -800,7 +899,7 @@ window.socket.on('board_update', (data) => {
         if (moveHistory.length > 0) {
             moveHistory.pop();
             window.moveHistory = moveHistory;
-            updateHistoryDisplay(); // <-- ОБНОВЛЯЕМ ПОСЛЕ ОТМЕНЫ
+            updateHistoryDisplay();
         }
         selectedCell = null;
         lastMove.from = null;
@@ -825,7 +924,7 @@ window.socket.on('board_update', (data) => {
         lastMove.to = null;
         moveHistory = [];
         window.moveHistory = [];
-        updateHistoryDisplay(); // <-- ОБНОВЛЯЕМ ПОСЛЕ СБРОСА
+        updateHistoryDisplay();
         canUndo = false;
         window.canUndo = false;
         
@@ -846,7 +945,7 @@ window.socket.on('board_update', (data) => {
         lastMove.to = null;
         moveHistory = [];
         window.moveHistory = [];
-        updateHistoryDisplay(); // <-- ОБНОВЛЯЕМ ПОСЛЕ ОЧИСТКИ
+        updateHistoryDisplay();
         canUndo = false;
         window.canUndo = false;
         
@@ -1137,12 +1236,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Синхронизируем после каждого хода
-const originalOnCellClick = window.onCellClick;
-if (originalOnCellClick) {
-    window.onCellClick = function(row, col) {
-        originalOnCellClick(row, col);
-        setTimeout(syncUndoManager, 100);
-    };
-}
+// Убираем обёртку, так как она ломает рокировку
+// Вместо этого добавляем синхронизацию в конец onCellClick
 
 console.log('✅ Синхронизация undoManager настроена');

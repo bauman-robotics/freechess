@@ -137,69 +137,126 @@ def handle_join(data):
     print(f'👤 {player_name} присоединился к комнате {room_id}')
     print(f'👥 Игроков в комнате: {len(games[room_id]["players"])}')
 
-@socketio.on('move')
-def handle_move(data):
-    room_id = data.get('room_id')
-    from_pos = data.get('from')
-    to_pos = data.get('to')
+    @socketio.on('move')
+    def handle_move(data):
+        room_id = data.get('room_id')
+        from_pos = data.get('from')
+        to_pos = data.get('to')
+        is_castling = data.get('isCastling', False)  # Флаг рокировки
 
-    if room_id not in games:
-        emit('error', {'message': 'Комната не найдена'})
-        return
+        if room_id not in games:
+            emit('error', {'message': 'Комната не найдена'})
+            return
 
-    game = games[room_id]
-    board = game['board']
-    piece = board[from_pos['row']][from_pos['col']]
+        game = games[room_id]
+        board = game['board']
+        piece = board[from_pos['row']][from_pos['col']]
 
-    if not piece:
-        emit('error', {'message': 'Нет фигуры на этой клетке'})
-        return
+        if not piece:
+            emit('error', {'message': 'Нет фигуры на этой клетке'})
+            return
 
-    # Сохраняем состояние доски ПЕРЕД ходом
-    game['history'].append({
-        'board': copy.deepcopy(board),
-        'move': {
-            'from': from_pos,
-            'to': to_pos,
-            'piece': piece
-        }
-    })
+        # === ЕСЛИ ЭТО РОКИРОВКА ===
+        if is_castling:
+            is_white = piece == 'K'
+            row = 7 if is_white else 0
+            king = 'K' if is_white else 'k'
+            rook = 'R' if is_white else 'r'
+            move_str = 'O-O' if to_pos['col'] > from_pos['col'] else 'O-O-O'
+            
+            # Сохраняем состояние доски ПЕРЕД ходом
+            game['history'].append({
+                'board': copy.deepcopy(board),
+                'move': {
+                    'from': from_pos,
+                    'to': to_pos,
+                    'piece': piece,
+                    'isCastling': True
+                }
+            })
+            
+            # Выполняем рокировку
+            if to_pos['col'] > from_pos['col']:  # Короткая рокировка
+                board[row][6] = king
+                board[row][4] = None
+                board[row][5] = rook
+                board[row][7] = None
+            else:  # Длинная рокировка
+                board[row][2] = king
+                board[row][4] = None
+                board[row][3] = rook
+                board[row][0] = None
+            
+            game['board'] = board
+            
+            # Добавляем в историю
+            game['move_history'].append(move_str)
+            
+            print(f'♟️ Рокировка: {move_str} ({from_pos["row"]},{from_pos["col"]} → {to_pos["row"]},{to_pos["col"]})')
+            print(f'📜 История: {len(game["move_history"])} ходов')
+            
+            emit('board_update', {
+                'board': board,
+                'move': {
+                    'from': from_pos,
+                    'to': to_pos,
+                    'piece': piece,
+                    'isCastling': True
+                },
+                'players': game['players'],
+                'can_undo': len(game['history']) > 0,
+                'history_len': len(game['history']),
+                'move_history': game['move_history'],
+                'arrows': game.get('arrows', [])
+            }, room=room_id)
+            return
 
-    # Перемещаем фигуру
-    board[to_pos['row']][to_pos['col']] = piece
-    board[from_pos['row']][from_pos['col']] = None
+        # === ОБЫЧНЫЙ ХОД ===
+        # Сохраняем состояние доски ПЕРЕД ходом
+        game['history'].append({
+            'board': copy.deepcopy(board),
+            'move': {
+                'from': from_pos,
+                'to': to_pos,
+                'piece': piece
+            }
+        })
 
-    game['board'] = board
+        # Перемещаем фигуру
+        board[to_pos['row']][to_pos['col']] = piece
+        board[from_pos['row']][from_pos['col']] = None
 
-    history_len = len(game['history'])
-    can_undo = history_len > 0
+        game['board'] = board
 
-    # Формируем строку хода для истории
-    from_square = f"{chr(65 + from_pos['col'])}{8 - from_pos['row']}"
-    to_square = f"{chr(65 + to_pos['col'])}{8 - to_pos['row']}"
-    piece_name = PIECE_NAMES.get(piece, piece)
-    move_str = f"{piece_name} {from_square}→{to_square}"
+        history_len = len(game['history'])
+        can_undo = history_len > 0
+
+        # Формируем строку хода для истории
+        from_square = f"{chr(65 + from_pos['col'])}{8 - from_pos['row']}"
+        to_square = f"{chr(65 + to_pos['col'])}{8 - to_pos['row']}"
+        piece_name = PIECE_NAMES.get(piece, piece)
+        move_str = f"{piece_name} {from_square}→{to_square}"
+        
+        # Добавляем в историю
+        game['move_history'].append(move_str)
+
+        print(f'♟️ Ход: {piece} {from_pos["row"]},{from_pos["col"]} → {to_pos["row"]},{to_pos["col"]}')
+        print(f'📜 История: {len(game["move_history"])} ходов')
+
+        emit('board_update', {
+            'board': board,
+            'move': {
+                'from': from_pos,
+                'to': to_pos,
+                'piece': piece
+            },
+            'players': game['players'],
+            'can_undo': can_undo,
+            'history_len': history_len,
+            'move_history': game['move_history'],
+            'arrows': game.get('arrows', [])
+        }, room=room_id)
     
-    # Добавляем в историю
-    game['move_history'].append(move_str)
-
-    print(f'♟️ Ход: {piece} {from_pos["row"]},{from_pos["col"]} → {to_pos["row"]},{to_pos["col"]}')
-    print(f'📜 История: {len(game["move_history"])} ходов')
-
-    emit('board_update', {
-        'board': board,
-        'move': {
-            'from': from_pos,
-            'to': to_pos,
-            'piece': piece
-        },
-        'players': game['players'],
-        'can_undo': can_undo,
-        'history_len': history_len,
-        'move_history': game['move_history'],  # <-- ПЕРЕДАЁМ ИСТОРИЮ
-        'arrows': game.get('arrows', [])
-    }, room=room_id)
-
 @socketio.on('undo_move')
 def handle_undo(data):
     room_id = data.get('room_id')
