@@ -182,6 +182,7 @@ class ChessRules {
     }
     
     isValidMove(fromRow, fromCol, toRow, toCol, board, color) {
+        // Если правила выключены — ВСЕ ходы разрешены
         if (!this.isEnabled) return true;
         
         try {
@@ -196,11 +197,24 @@ class ChessRules {
                 return false;
             }
             
+            // ============================================
+            // ⚡ КРИТИЧЕСКАЯ ПРОВЕРКА: Нельзя съесть короля!
+            // ============================================
+            const targetPiece = board[toRow]?.[toCol];
+            if (targetPiece && (targetPiece === 'K' || targetPiece === 'k')) {
+                console.log('❌ Нельзя съесть короля! (правила включены)');
+                if (typeof showToast === 'function') {
+                    showToast('❌ Нельзя съесть короля! (правила включены)', 'error');
+                }
+                return false;
+            }
+            
             // === ПРОВЕРКА РОКИРОВКИ ===
             if ((piece === 'K' || piece === 'k') && Math.abs(toCol - fromCol) === 2) {
                 return this.isValidCastling(fromRow, fromCol, toRow, toCol, board, playerColor);
             }
             
+            // === ПРОВЕРКА ЧЕРЕЗ chess.js ===
             const game = this.createTempGame(board);
             if (!game) return false;
             
@@ -208,7 +222,13 @@ class ChessRules {
             const to = this.toAlgebraic(toRow, toCol);
             
             const moves = game.moves({ verbose: true });
-            return moves.some(m => m.from === from && m.to === to);
+            const isValid = moves.some(m => m.from === from && m.to === to);
+            
+            if (!isValid) {
+                console.log(`❌ Недопустимый ход: ${from} → ${to}`);
+            }
+            
+            return isValid;
         } catch (error) {
             console.error('❌ Ошибка проверки хода:', error);
             return false;
