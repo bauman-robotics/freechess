@@ -4,6 +4,7 @@ class ChessRules {
     constructor() {
         this.isEnabled = true;
         this.currentColor = 'white';
+        this.moveHistory = [];
     }
     
     setCurrentColor(color) {
@@ -83,84 +84,207 @@ class ChessRules {
         return board;
     }
     
-    // === РУЧНАЯ ПРОВЕРКА РОКИРОВКИ ===
-    isValidCastling(fromRow, fromCol, toRow, toCol, board, color) {
-        const isWhite = color === 'white';
-        const row = isWhite ? 7 : 0;
+    // ============================================
+    // ИСТОРИЯ ХОДОВ
+    // ============================================
+    
+    addMoveToHistory(move) {
+        console.log(`📝 Добавление хода в историю:`, {
+            piece: move.piece,
+            from: move.from,
+            to: move.to,
+            isCastling: move.isCastling
+        });
         
-        // Проверяем, что король на правильной клетке
-        if (fromRow !== row || fromCol !== 4) return false;
-        if (toRow !== row) return false;
+        this.moveHistory.push({
+            piece: move.piece,
+            from: move.from,
+            to: move.to,
+            isCastling: move.isCastling || false,
+            promotion: move.promotion || null
+        });
         
+        if (this.moveHistory.length > 200) {
+            this.moveHistory = this.moveHistory.slice(-200);
+        }
+    }
+    
+    clearHistory() {
+        this.moveHistory = [];
+        console.log('♟️ История chessRules очищена');
+    }
+    
+    // ============================================
+    // ПРОВЕРКИ ДЛЯ РОКИРОВКИ
+    // ============================================
+    
+    hasKingMoved(isWhite) {
         const king = isWhite ? 'K' : 'k';
-        const rook = isWhite ? 'R' : 'r';
         
-        // Проверяем, что это король
-        if (board[fromRow][fromCol] !== king) return false;
-        
-        // Короткая рокировка (король идёт вправо)
-        if (toCol === 6) {
-            if (board[row][7] !== rook) return false;
-            if (board[row][5] !== null || board[row][6] !== null) return false;
-            return true;
+        for (const entry of this.moveHistory) {
+            if (entry.piece === king) {
+                return true;
+            }
+            if (entry.isCastling) {
+                const entryIsWhite = entry.piece === 'K';
+                if (entryIsWhite === isWhite) {
+                    return true;
+                }
+            }
         }
-        
-        // Длинная рокировка (король идёт влево)
-        if (toCol === 2) {
-            if (board[row][0] !== rook) return false;
-            if (board[row][1] !== null || board[row][2] !== null || board[row][3] !== null) return false;
-            return true;
-        }
-        
         return false;
     }
     
-    // === РУЧНОЕ ВЫПОЛНЕНИЕ РОКИРОВКИ ===
+    hasRookMoved(isWhite, isKingside) {
+        const rook = isWhite ? 'R' : 'r';
+        const startRow = isWhite ? 7 : 0;
+        const startCol = isKingside ? 7 : 0;
+        
+        console.log(`🔍 Проверка ходов ладьи: ищем ${rook} с (${startRow},${startCol})`);
+        
+        for (const entry of this.moveHistory) {
+            if (entry.piece === rook) {
+                console.log(`   Проверяем: ${entry.piece} from(${entry.from.row},${entry.from.col})`);
+                if (entry.from.row === startRow && entry.from.col === startCol) {
+                    console.log(`   ❌ Ладья ходила!`);
+                    return true;
+                }
+            }
+        }
+        console.log(`   ✅ Ладья не ходила`);
+        return false;
+    }
+    
+    // ============================================
+    // ПРОВЕРКА РОКИРОВКИ
+    // ============================================
+    
+    isValidCastling(fromRow, fromCol, toRow, toCol, board, color) {
+        if (!this.isEnabled) return true;
+        
+        try {
+            const piece = board[fromRow]?.[fromCol];
+            
+            if (!piece || (piece !== 'K' && piece !== 'k')) {
+                if (typeof showToast === 'function') {
+                    showToast('❌ Рокировка возможна только королём', 'error');
+                }
+                return false;
+            }
+            
+            const isWhite = piece === 'K';
+            const row = isWhite ? 7 : 0;
+            
+            if (fromRow !== row || fromCol !== 4) {
+                if (typeof showToast === 'function') {
+                    showToast('❌ Король не на своей начальной позиции', 'error');
+                }
+                return false;
+            }
+            
+            if (this.hasKingMoved(isWhite)) {
+                console.log('❌ Король уже ходил');
+                if (typeof showToast === 'function') {
+                    showToast('❌ Король уже ходил, рокировка невозможна', 'error');
+                }
+                return false;
+            }
+            
+            const isKingside = toCol > fromCol;
+            const rookCol = isKingside ? 7 : 0;
+            const rook = isWhite ? 'R' : 'r';
+            
+            if (board[row][rookCol] !== rook) {
+                if (typeof showToast === 'function') {
+                    showToast('❌ Ладья не на своей позиции', 'error');
+                }
+                return false;
+            }
+            
+            if (this.hasRookMoved(isWhite, isKingside)) {
+                if (typeof showToast === 'function') {
+                    showToast('❌ Ладья уже ходила, рокировка невозможна', 'error');
+                }
+                return false;
+            }
+            
+            const betweenCols = isKingside ? [5, 6] : [1, 2, 3];
+            for (const col of betweenCols) {
+                if (board[row][col] !== null) {
+                    if (typeof showToast === 'function') {
+                        showToast('❌ Путь для рокировки заблокирован', 'error');
+                    }
+                    return false;
+                }
+            }
+            
+            // Проверка через chess.js
+            const game = this.createTempGame(board);
+            if (!game) return false;
+            
+            const moves = game.moves({ verbose: true });
+            const hasCastling = moves.some(m => m.san === 'O-O' || m.san === 'O-O-O');
+            
+            if (!hasCastling) {
+                if (typeof showToast === 'function') {
+                    showToast('❌ Рокировка невозможна (шах или битое поле)', 'error');
+                }
+                return false;
+            }
+            
+            return true;
+            
+        } catch (error) {
+            console.error('❌ Ошибка проверки рокировки:', error);
+            return false;
+        }
+    }
+    
+    // ============================================
+    // ВЫПОЛНЕНИЕ РОКИРОВКИ
+    // ============================================
+    
     makeCastling(fromRow, fromCol, toRow, toCol, board, color) {
-        console.log('🔧 makeCastling вызван:', { fromRow, fromCol, toRow, toCol, color });
-
         const isWhite = color === 'white';
         const row = isWhite ? 7 : 0;
         const king = isWhite ? 'K' : 'k';
         const rook = isWhite ? 'R' : 'r';
-
-        // ✅ КОПИРУЕМ ДОСКУ
+        
         const newBoard = board.map(row => [...row]);
-
-        console.log('Доска ДО:');
-        console.log(newBoard.map(row => row.map(c => c || '.').join(' ')).join('\n'));
-
-        // Короткая рокировка (O-O)
+        
         if (toCol > fromCol) {
-            console.log('♟️ Короткая рокировка (O-O)');
-            newBoard[row][6] = king;    // король на g1
-            newBoard[row][4] = null;    // e1 пусто
-            newBoard[row][5] = rook;    // ладья на f1
-            newBoard[row][7] = null;    // h1 пусто
+            newBoard[row][6] = king;
+            newBoard[row][4] = null;
+            newBoard[row][5] = rook;
+            newBoard[row][7] = null;
+        } else {
+            newBoard[row][2] = king;
+            newBoard[row][4] = null;
+            newBoard[row][3] = rook;
+            newBoard[row][0] = null;
         }
-        // Длинная рокировка (O-O-O)
-        else {
-            console.log('♟️ Длинная рокировка (O-O-O)');
-            newBoard[row][2] = king;    // король на c1
-            newBoard[row][4] = null;    // e1 пусто
-            newBoard[row][3] = rook;    // ладья на d1  <--- ЗДЕСЬ БЫЛА ОШИБКА?
-            newBoard[row][0] = null;    // a1 пусто
-        }
-
-        console.log('Доска ПОСЛЕ:');
-        console.log(newBoard.map(row => row.map(c => c || '.').join(' ')).join('\n'));
-
+        
+        this.addMoveToHistory({
+            piece: king,
+            from: { row: fromRow, col: fromCol },
+            to: { row: toRow, col: toCol },
+            isCastling: true
+        });
+        
         return newBoard;
     }
-        
-    makeMove(fromRow, fromCol, toRow, toCol, board, color) {
+    
+    // ============================================
+    // ВЫПОЛНЕНИЕ ОБЫЧНОГО ХОДА
+    // ============================================
+    
+    makeMove(fromRow, fromCol, toRow, toCol, board, color, promotion) {
         if (!this.isEnabled) return null;
         
         try {
             const playerColor = color || this.currentColor || 'white';
             const piece = board[fromRow]?.[fromCol];
             
-            // === ПРОВЕРКА РОКИРОВКИ ===
             if ((piece === 'K' || piece === 'k') && Math.abs(toCol - fromCol) === 2) {
                 return this.makeCastling(fromRow, fromCol, toRow, toCol, board, playerColor);
             }
@@ -171,8 +295,21 @@ class ChessRules {
             const from = this.toAlgebraic(fromRow, fromCol);
             const to = this.toAlgebraic(toRow, toCol);
             
-            const move = game.move({ from: from, to: to });
-            if (!move) return null;
+            const moveData = { from: from, to: to };
+            if (promotion) {
+                moveData.promotion = promotion;
+            }
+            
+            const result = game.move(moveData);
+            if (!result) return null;
+            
+            this.addMoveToHistory({
+                piece: piece,
+                from: { row: fromRow, col: fromCol },
+                to: { row: toRow, col: toCol },
+                isCastling: false,
+                promotion: promotion || null
+            });
             
             return this.FENtoBoard(game.fen());
         } catch (error) {
@@ -181,8 +318,11 @@ class ChessRules {
         }
     }
     
+    // ============================================
+    // ПРОВЕРКА ХОДА
+    // ============================================
+    
     isValidMove(fromRow, fromCol, toRow, toCol, board, color) {
-        // Если правила выключены — ВСЕ ходы разрешены
         if (!this.isEnabled) return true;
         
         try {
@@ -197,24 +337,19 @@ class ChessRules {
                 return false;
             }
             
-            // ============================================
-            // ⚡ КРИТИЧЕСКАЯ ПРОВЕРКА: Нельзя съесть короля!
-            // ============================================
             const targetPiece = board[toRow]?.[toCol];
             if (targetPiece && (targetPiece === 'K' || targetPiece === 'k')) {
-                console.log('❌ Нельзя съесть короля! (правила включены)');
+                console.log('❌ Нельзя съесть короля!');
                 if (typeof showToast === 'function') {
-                    showToast('❌ Нельзя съесть короля! (правила включены)', 'error');
+                    showToast('❌ Нельзя съесть короля!', 'error');
                 }
                 return false;
             }
             
-            // === ПРОВЕРКА РОКИРОВКИ ===
             if ((piece === 'K' || piece === 'k') && Math.abs(toCol - fromCol) === 2) {
                 return this.isValidCastling(fromRow, fromCol, toRow, toCol, board, playerColor);
             }
             
-            // === ПРОВЕРКА ЧЕРЕЗ chess.js ===
             const game = this.createTempGame(board);
             if (!game) return false;
             
@@ -234,6 +369,10 @@ class ChessRules {
             return false;
         }
     }
+    
+    // ============================================
+    // ПРОВЕРКИ ШАХА, МАТА
+    // ============================================
     
     isInCheck(board) {
         if (!this.isEnabled) return false;
@@ -275,6 +414,10 @@ class ChessRules {
         }
     }
     
+    // ============================================
+    // УТИЛИТЫ
+    // ============================================
+    
     toAlgebraic(row, col) {
         return String.fromCharCode(97 + col) + (8 - row);
     }
@@ -292,9 +435,112 @@ class ChessRules {
             showToast(enabled ? '✅ Правила включены' : '⛔ Правила выключены', 'info');
         }
     }
+    
+    // ============================================
+    // СИНХРОНИЗАЦИЯ ИСТОРИИ С СЕРВЕРА
+    // ============================================
+    syncHistoryFromServer(moveHistory) {
+        this.clearHistory();
+        
+        console.log('🔄 Синхронизация истории с сервера (UCI):', moveHistory);
+        
+        // Создаём копию доски для отслеживания фигур
+        let tempBoard = board.map(row => [...row]);
+        
+        for (const moveStr of moveHistory) {
+            let from = { row: -1, col: -1 };
+            let to = { row: -1, col: -1 };
+            let isCastling = false;
+            let piece = 'P';
+            
+            // Рокировка
+            if (moveStr === 'O-O' || moveStr === 'O-O-O') {
+                isCastling = true;
+                piece = 'K';
+                const isWhite = this.moveHistory.length % 2 === 0;
+                const row = isWhite ? 7 : 0;
+                from = { row: row, col: 4 };
+                to = { row: row, col: moveStr === 'O-O' ? 6 : 2 };
+                
+                // Обновляем доску для рокировки
+                const king = isWhite ? 'K' : 'k';
+                const rook = isWhite ? 'R' : 'r';
+                const rookFromCol = moveStr === 'O-O' ? 7 : 0;
+                const rookToCol = moveStr === 'O-O' ? 5 : 3;
+                
+                tempBoard[to.row][to.col] = king;
+                tempBoard[from.row][from.col] = null;
+                tempBoard[row][rookToCol] = rook;
+                tempBoard[row][rookFromCol] = null;
+                
+                this.addMoveToHistory({
+                    piece: piece,
+                    from: from,
+                    to: to,
+                    isCastling: isCastling
+                });
+                continue;
+            }
+            
+            // UCI формат: "h1g1" или "e2e4"
+            if (moveStr.length >= 4) {
+                const fromSquare = moveStr.substring(0, 2);
+                const toSquare = moveStr.substring(2, 4);
+                
+                from = this.fromAlgebraic(fromSquare);
+                to = this.fromAlgebraic(toSquare);
+                
+                // ============================================
+                // ⚡ ОПРЕДЕЛЯЕМ ФИГУРУ ПО ДОСКЕ!
+                // ============================================
+                const tempPiece = tempBoard[from.row]?.[from.col];
+                if (tempPiece) {
+                    piece = tempPiece;
+                    console.log(`   ✅ ${fromSquare} → ${toSquare}: ${piece}`);
+                } else {
+                    console.warn(`   ⚠️ Нет фигуры на ${fromSquare} для хода ${moveStr}`);
+                    piece = 'P';
+                }
+                
+                // Обновляем доску (перемещаем фигуру)
+                if (tempPiece) {
+                    // Проверяем превращение
+                    const isPromotion = moveStr.length === 5;
+                    if (isPromotion) {
+                        const promoChar = moveStr.charAt(4);
+                        const isWhite = tempPiece === tempPiece.toUpperCase();
+                        const promoMap = {
+                            'q': isWhite ? 'Q' : 'q',
+                            'r': isWhite ? 'R' : 'r',
+                            'b': isWhite ? 'B' : 'b',
+                            'n': isWhite ? 'N' : 'n'
+                        };
+                        tempBoard[to.row][to.col] = promoMap[promoChar] || tempPiece;
+                    } else {
+                        tempBoard[to.row][to.col] = tempPiece;
+                    }
+                    tempBoard[from.row][from.col] = null;
+                }
+            }
+            
+            this.addMoveToHistory({
+                piece: piece,
+                from: from,
+                to: to,
+                isCastling: isCastling
+            });
+        }
+        
+        console.log(`♟️ История синхронизирована: ${moveHistory.length} ходов`);
+        console.log('📜 Текущая история:', this.moveHistory);
+    }
 }
+
+// ============================================
+// ИНИЦИАЛИЗАЦИЯ
+// ============================================
 
 const chessRules = new ChessRules();
 window.chessRules = chessRules;
 
-console.log('♟️ ChessRules загружен с ручной рокировкой!');
+console.log('♟️ ChessRules загружен');

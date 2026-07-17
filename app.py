@@ -4,6 +4,7 @@ import random
 import string
 import time
 import copy
+import chess  # ← ДОБАВЛЯЕМ ИМПОРТ
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
@@ -39,6 +40,62 @@ PIECE_NAMES = {
     'k': 'Король', 'q': 'Ферзь', 'r': 'Ладья', 'b': 'Слон', 'n': 'Конь', 'p': 'Пешка'
 }
 
+def board_to_fen(board):
+    """Преобразует доску в FEN нотацию"""
+    fen = ''
+    for r in range(8):
+        empty = 0
+        for c in range(8):
+            piece = board[r][c]
+            if piece:
+                if empty > 0:
+                    fen += str(empty)
+                    empty = 0
+                fen += piece
+            else:
+                empty += 1
+        if empty > 0:
+            fen += str(empty)
+        if r < 7:
+            fen += '/'
+    fen += ' w - - 0 1'
+    return fen
+
+def get_san_move(board, from_row, from_col, to_row, to_col, promotion=None):
+    """
+    Генерирует SAN нотацию для хода.
+    Если ход нелегальный (режим песочницы), возвращает UCI.
+    """
+    try:
+        fen = board_to_fen(board)
+        chess_board = chess.Board(fen)
+        
+        from_square = chess.parse_square(f"{chr(97 + from_col)}{8 - from_row}")
+        to_square = chess.parse_square(f"{chr(97 + to_col)}{8 - to_row}")
+        
+        move = chess.Move(from_square, to_square)
+        
+        if promotion:
+            promo_map = {
+                'q': chess.QUEEN, 'Q': chess.QUEEN,
+                'r': chess.ROOK, 'R': chess.ROOK,
+                'b': chess.BISHOP, 'B': chess.BISHOP,
+                'n': chess.KNIGHT, 'N': chess.KNIGHT
+            }
+            move.promotion = promo_map.get(promotion.lower())
+        
+        # Проверяем легальность хода
+        if move not in chess_board.legal_moves:
+            # Если ход нелегальный (песочница), возвращаем UCI
+            return f"{chr(97 + from_col)}{8 - from_row}{chr(97 + to_col)}{8 - to_row}"
+        
+        # Возвращаем SAN
+        return chess_board.san(move)
+    except Exception as e:
+        print(f"⚠️ Ошибка генерации SAN: {e}")
+        # Fallback: UCI
+        return f"{chr(97 + from_col)}{8 - from_row}{chr(97 + to_col)}{8 - to_row}"
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -51,7 +108,7 @@ def create_game():
         'players': [],
         'created_at': time.time(),
         'history': [],
-        'move_history': [],  # <-- ДЛЯ ХРАНЕНИЯ ИСТОРИИ В СТРОКАХ
+        'move_history': [],
         'arrows': [],
         'rules_enabled': True
     }
@@ -79,7 +136,6 @@ def handle_join(data):
 
     join_room(room_id)
 
-    # Проверяем, не присоединён ли уже этот игрок
     existing_player = None
     for p in games[room_id]['players']:
         if p['id'] == request.sid:
@@ -87,7 +143,6 @@ def handle_join(data):
             break
 
     if existing_player:
-        # Если игрок уже есть, просто отправляем текущее состояние
         emit('joined', {
             'room_id': room_id,
             'player': existing_player,
@@ -112,14 +167,12 @@ def handle_join(data):
     }
     games[room_id]['players'].append(player)
 
-    # Отправляем новому игроку данные о присоединении
     emit('joined', {
         'room_id': room_id,
         'player': player,
         'players': games[room_id]['players']
     }, room=request.sid)
 
-    # Отправляем ВСЕМ в комнате обновление списка игроков
     emit('players_update', {
         'players': games[room_id]['players']
     }, room=room_id)
@@ -148,8 +201,10 @@ def handle_move(data):
     - Проверку правил (если включены)
     - Запрет на съедение короля (если правила включены)
     
-    Примечание: Основная проверка правил выполняется на клиенте через chess.js.
-    На сервере проверяется только критическое правило — запрет на съедение короля.
+    История хранится в SAN формате (стандартная шахматная нотация):
+    - Обычные ходы: "e4", "Nf3"
+    - Рокировка: "O-O", "O-O-O"
+    - Превращение: "e8=Q", "a8=Q"
     """
     room_id = data.get('room_id')
     from_pos = data.get('from')
@@ -157,7 +212,6 @@ def handle_move(data):
     is_castling = data.get('isCastling', False)
     promotion = data.get('promotion')  # 'q' | 'r' | 'b' | 'n' | None
 
-    # === ПРОВЕРКА СУЩЕСТВОВАНИЯ КОМНАТЫ ===
     if room_id not in games:
         emit('error', {'message': 'Комната не найдена'})
         return
@@ -166,49 +220,38 @@ def handle_move(data):
     board = game['board']
     piece = board[from_pos['row']][from_pos['col']]
 
-    # === ПРОВЕРКА НАЛИЧИЯ ФИГУРЫ ===
     if not piece:
         emit('error', {'message': 'Нет фигуры на этой клетке'})
         return
 
-    # === ПРОВЕРКА ПРАВИЛ НА СЕРВЕРЕ ===
-    # Получаем состояние правил из игры (по умолчанию True)
     rules_enabled = game.get('rules_enabled', True)
     
     if rules_enabled:
-        # КРИТИЧЕСКАЯ ПРОВЕРКА: Нельзя съесть короля, если правила включены!
-        # Это базовое правило, которое должно проверяться на сервере
-        # для предотвращения читерства
         target_piece = board[to_pos['row']][to_pos['col']]
         if target_piece and target_piece.lower() == 'k':
             emit('error', {'message': '❌ Нельзя съесть короля! (правила включены)'})
             return
         
-        # ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Рокировка
-        # Проверяем базовые условия рокировки на сервере
         if is_castling:
-            # Проверяем, что это действительно король
             if piece not in ['K', 'k']:
                 emit('error', {'message': '❌ Рокировка возможна только королём'})
                 return
             
-            # Проверяем, что король на правильной позиции
             is_white = piece == 'K'
             row = 7 if is_white else 0
             if from_pos['row'] != row or from_pos['col'] != 4:
                 emit('error', {'message': '❌ Неверная позиция для рокировки'})
                 return
             
-            # Проверяем, что ладья на месте
             rook = 'R' if is_white else 'r'
-            if to_pos['col'] > from_pos['col']:  # Короткая рокировка (O-O)
+            if to_pos['col'] > from_pos['col']:
                 if board[row][7] != rook:
                     emit('error', {'message': '❌ Нет ладьи для короткой рокировки'})
                     return
                 if board[row][5] is not None or board[row][6] is not None:
                     emit('error', {'message': '❌ Путь для рокировки заблокирован'})
                     return
-            else:  # Длинная рокировка (O-O-O)
+            else:
                 if board[row][0] != rook:
                     emit('error', {'message': '❌ Нет ладьи для длинной рокировки'})
                     return
@@ -222,9 +265,10 @@ def handle_move(data):
         row = 7 if is_white else 0
         king = 'K' if is_white else 'k'
         rook = 'R' if is_white else 'r'
+        
+        # SAN нотация для рокировки
         move_str = 'O-O' if to_pos['col'] > from_pos['col'] else 'O-O-O'
         
-        # Сохраняем состояние доски ПЕРЕД ходом
         game['history'].append({
             'board': copy.deepcopy(board),
             'move': {
@@ -235,27 +279,23 @@ def handle_move(data):
             }
         })
         
-        # Выполняем рокировку
-        if to_pos['col'] > from_pos['col']:  # Короткая рокировка (O-O)
-            board[row][6] = king    # Король на g1/g8
-            board[row][4] = None    # e1/e8 пусто
-            board[row][5] = rook    # Ладья на f1/f8
-            board[row][7] = None    # h1/h8 пусто
-        else:  # Длинная рокировка (O-O-O)
-            board[row][2] = king    # Король на c1/c8
-            board[row][4] = None    # e1/e8 пусто
-            board[row][3] = rook    # Ладья на d1/d8
-            board[row][0] = None    # a1/a8 пусто
+        if to_pos['col'] > from_pos['col']:
+            board[row][6] = king
+            board[row][4] = None
+            board[row][5] = rook
+            board[row][7] = None
+        else:
+            board[row][2] = king
+            board[row][4] = None
+            board[row][3] = rook
+            board[row][0] = None
         
         game['board'] = board
-        
-        # Добавляем в историю
         game['move_history'].append(move_str)
         
         print(f'♟️ Рокировка: {move_str} ({from_pos["row"]},{from_pos["col"]} → {to_pos["row"]},{to_pos["col"]})')
         print(f'📜 История: {len(game["move_history"])} ходов')
         
-        # Отправляем обновление всем в комнате
         emit('board_update', {
             'board': board,
             'move': {
@@ -269,12 +309,11 @@ def handle_move(data):
             'history_len': len(game['history']),
             'move_history': game['move_history'],
             'arrows': game.get('arrows', []),
-            'rules_enabled': rules_enabled  # Отправляем состояние правил
+            'rules_enabled': rules_enabled
         }, room=room_id)
         return
 
     # === ОБЫЧНЫЙ ХОД ===
-    # Сохраняем состояние доски ПЕРЕД ходом (для отмены)
     game['history'].append({
         'board': copy.deepcopy(board),
         'move': {
@@ -284,16 +323,13 @@ def handle_move(data):
         }
     })
 
-    # Перемещаем фигуру
     board[to_pos['row']][to_pos['col']] = piece
     board[from_pos['row']][from_pos['col']] = None
 
-    # === ПРЕВРАЩЕНИЕ ПЕШКИ ===
     promoted_piece = None
     is_white_pawn = piece == 'P' and to_pos['row'] == 0
     is_black_pawn = piece == 'p' and to_pos['row'] == 7
 
-    # Если пешка достигла последней линии и выбрана фигура для превращения
     if promotion and (is_white_pawn or is_black_pawn):
         allowed = {'q', 'r', 'b', 'n'}
         promo_key = promotion.lower() if promotion.lower() in allowed else 'q'
@@ -305,38 +341,35 @@ def handle_move(data):
     history_len = len(game['history'])
     can_undo = history_len > 0
 
-    # Формируем строку хода для истории
-    from_square = f"{chr(65 + from_pos['col'])}{8 - from_pos['row']}"
-    to_square = f"{chr(65 + to_pos['col'])}{8 - to_pos['row']}"
-    piece_name = PIECE_NAMES.get(piece, piece)
-    move_str = f"{piece_name} {from_square}→{to_square}"
-
-    if promoted_piece:
-        move_str += f" (={PIECE_NAMES.get(promoted_piece, promoted_piece)})"
+    # ============================================
+    # ⚡ ГЕНЕРИРУЕМ SAN НОТАЦИЮ
+    # ============================================
+    san_move = get_san_move(board, from_pos['row'], from_pos['col'], 
+                           to_pos['row'], to_pos['col'], promotion)
     
-    # Добавляем в историю
-    game['move_history'].append(move_str)
+    # Добавляем в историю (SAN формат)
+    game['move_history'].append(san_move)
 
-    print(f'♟️ Ход: {piece} {from_pos["row"]},{from_pos["col"]} → {to_pos["row"]},{to_pos["col"]}')
+    print(f'♟️ Ход: {piece} {from_pos["row"]},{from_pos["col"]} → {to_pos["row"]},{to_pos["col"]} ({san_move})')
     if promoted_piece:
         print(f'👑 Превращение: {piece} → {promoted_piece}')
     print(f'📜 История: {len(game["move_history"])} ходов')
 
-    # Отправляем обновление всем в комнате
     emit('board_update', {
         'board': board,
         'move': {
             'from': from_pos,
             'to': to_pos,
             'piece': piece,
-            'promotion': promoted_piece
+            'promotion': promoted_piece,
+            'san': san_move
         },
         'players': game['players'],
         'can_undo': can_undo,
         'history_len': history_len,
         'move_history': game['move_history'],
         'arrows': game.get('arrows', []),
-        'rules_enabled': rules_enabled  # Отправляем состояние правил
+        'rules_enabled': rules_enabled
     }, room=room_id)
 
 @socketio.on('undo_move')
@@ -357,7 +390,6 @@ def handle_undo(data):
     previous_state = history.pop()
     game['board'] = previous_state['board']
     
-    # Удаляем последний ход из истории
     if game['move_history']:
         game['move_history'].pop()
 
@@ -373,7 +405,7 @@ def handle_undo(data):
         'undo_move': previous_state['move'],
         'can_undo': can_undo,
         'history_len': history_len,
-        'move_history': game['move_history'],  # <-- ПЕРЕДАЁМ ОБНОВЛЁННУЮ ИСТОРИЮ
+        'move_history': game['move_history'],
         'arrows': game.get('arrows', [])
     }, room=room_id)
 
@@ -386,7 +418,7 @@ def handle_reset(data):
     game = games[room_id]
     game['board'] = initial_board()
     game['history'] = []
-    game['move_history'] = []  # <-- ОЧИЩАЕМ ИСТОРИЮ
+    game['move_history'] = []
     
     emit('board_update', {
         'board': game['board'],
@@ -407,10 +439,8 @@ def handle_toggle_rules(data):
         return
     
     game = games[room_id]
-    # Переключаем состояние
     game['rules_enabled'] = not game['rules_enabled']
     
-    # Отправляем всем в комнате
     emit('rules_state', {
         'room_id': room_id,
         'enabled': game['rules_enabled']
@@ -428,7 +458,7 @@ def handle_clear(data):
     board = [[None for _ in range(8)] for _ in range(8)]
     game['board'] = board
     game['history'] = []
-    game['move_history'] = []  # <-- ОЧИЩАЕМ ИСТОРИЮ
+    game['move_history'] = []
     
     emit('board_update', {
         'board': board,
@@ -440,7 +470,6 @@ def handle_clear(data):
         'arrows': game.get('arrows', [])
     }, room=room_id)
 
-# Обработчик для обновления игроков
 @socketio.on('get_players')
 def handle_get_players(data):
     room_id = data.get('room_id')

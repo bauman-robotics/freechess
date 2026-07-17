@@ -5,6 +5,7 @@
 Flask==3.0.3
 Flask-SocketIO==5.3.4
 eventlet==0.33.3
+python-chess
 
 # gevent==23.9.0      # вместо eventlet
 # gevent-websocket==0.10.1

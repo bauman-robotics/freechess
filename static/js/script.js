@@ -177,7 +177,9 @@ function renderBoard() {
     console.log('✅ Доска отрендерена');
 }
 
-// === ОБРАБОТКА КЛИКА ===
+// ============================================
+// ОБРАБОТКА КЛИКА
+// ============================================
 async function onCellClick(row, col) {
     console.log(`🖱️ Клик по клетке ${row},${col}`);
     if (!currentRoom) {
@@ -230,16 +232,62 @@ async function onCellClick(row, col) {
             promotionPiece = await window.pawnPromotion.ask(myColor);
         }
         
+        // ============================================
+        // ⚡ СОХРАНЯЕМ КООРДИНАТЫ ДЛЯ ИСТОРИИ (ДО ОТПРАВКИ НА СЕРВЕР)
+        // ============================================
+        window._pendingMove = {
+            from: { row: fromRow, col: fromCol },
+            to: { row: row, col: col },
+            piece: fromPiece,
+            isCastling: isCastlingMove,
+            promotion: promotionPiece
+        };
+        
         // === ПРОВЕРКА ПРАВИЛ ЧЕРЕЗ chessRules ===
         if (rulesEnabled) {
             if (isCastlingMove) {
+                // Полная проверка рокировки через chessRules
                 const isValid = window.chessRules.isValidCastling(fromRow, fromCol, row, col, board, myColor);
                 if (!isValid) {
-                    showToast('❌ Недопустимая рокировка!', 'error');
+                    // isValidCastling уже показывает toast с причиной
                     selectedCell = null;
                     renderBoard();
                     return;
                 }
+                
+                // Выполняем рокировку через chessRules
+                const newBoard = window.chessRules.makeCastling(fromRow, fromCol, row, col, board, myColor);
+                if (newBoard) {
+                    board = newBoard;
+                } else {
+                    // Fallback: выполняем вручную
+                    const isWhite = myColor === 'white';
+                    const boardRow = isWhite ? 7 : 0;
+                    const king = isWhite ? 'K' : 'k';
+                    const rook = isWhite ? 'R' : 'r';
+                    
+                    if (col > fromCol) {
+                        board[boardRow][6] = king;
+                        board[boardRow][4] = null;
+                        board[boardRow][5] = rook;
+                        board[boardRow][7] = null;
+                    } else {
+                        board[boardRow][2] = king;
+                        board[boardRow][4] = null;
+                        board[boardRow][3] = rook;
+                        board[boardRow][0] = null;
+                    }
+                }
+                
+                // Формируем строку хода
+                const moveStr = (col > fromCol) ? 'O-O' : 'O-O-O';
+                
+                // Сохраняем ход в историю
+                moveHistory.push(moveStr);
+                window.moveHistory = moveHistory;
+                document.getElementById('lastMove').textContent = moveStr;
+                setStatus(`Ход: ${moveStr}`, 'success');
+                
                 // Отправляем рокировку на сервер
                 if (window.socket) {
                     window.socket.emit('move', {
@@ -249,19 +297,28 @@ async function onCellClick(row, col) {
                         isCastling: true
                     });
                 }
-                const moveStr = (col > fromCol) ? 'O-O' : 'O-O-O';
-                moveHistory.push(moveStr);
-                window.moveHistory = moveHistory;
-                document.getElementById('lastMove').textContent = moveStr;
-                setStatus(`Ход: ${moveStr}`, 'success');
+                
+                // Синхронизируем undoManager
+                if (window.undoManager) {
+                    setTimeout(function() {
+                        window.undoManager.syncFromGame(
+                            currentRoom,
+                            moveHistory,
+                            true
+                        );
+                    }, 50);
+                }
+                
                 selectedCell = null;
                 renderBoard();
                 return;
             } else {
+                // === ОБЫЧНЫЙ ХОД С ПРОВЕРКОЙ ПРАВИЛ ===
+                
                 // Проверяем ход через chessRules
                 const isValid = window.chessRules.isValidMove(fromRow, fromCol, row, col, board, myColor);
                 if (!isValid) {
-                    // isvalid уже показывает toast
+                    // isValid уже показывает toast
                     selectedCell = null;
                     renderBoard();
                     return;
@@ -283,11 +340,11 @@ async function onCellClick(row, col) {
                         : promotionPiece.toLowerCase();
                 }
                 
+                // Формируем строку хода для истории
                 const fromName = PIECE_NAMES[fromPiece] || fromPiece;
                 const fromSquare = `${String.fromCharCode(65 + fromCol)}${8 - fromRow}`;
                 const toSquare = `${String.fromCharCode(65 + col)}${8 - row}`;
                 let moveStr = `${fromName} ${fromSquare}→${toSquare}`;
-
                 if (promotionPiece) {
                     moveStr += ` (=${PIECE_NAMES[board[row][col]] || board[row][col]})`;
                 }
@@ -302,6 +359,7 @@ async function onCellClick(row, col) {
                     }
                 }
                 
+                // Сохраняем ход в историю
                 if (moveStr) {
                     moveHistory.push(moveStr);
                     window.moveHistory = moveHistory;
@@ -309,7 +367,8 @@ async function onCellClick(row, col) {
                     setStatus(`Ход: ${moveStr}`, 'success');
                 }
 
-                if (window.socket && !isCastlingMove) {
+                // Отправляем ход на сервер
+                if (window.socket) {
                     window.socket.emit('move', {
                         room_id: currentRoom,
                         from: { row: fromRow, col: fromCol },
@@ -326,6 +385,19 @@ async function onCellClick(row, col) {
         } else {
             // === РЕЖИМ БЕЗ ПРАВИЛ ===
             // Просто перемещаем фигуру, разрешаем есть короля
+            
+            // Проверяем, не пытается ли игрок съесть свою фигуру
+            if (targetPiece) {
+                const fromColor = fromPiece === fromPiece.toUpperCase() ? 'white' : 'black';
+                const toColor = targetPiece === targetPiece.toUpperCase() ? 'white' : 'black';
+                if (fromColor === toColor) {
+                    showToast('❌ Нельзя съесть свою фигуру!', 'error');
+                    selectedCell = null;
+                    renderBoard();
+                    return;
+                }
+            }
+            
             board[row][col] = fromPiece;
             board[fromRow][fromCol] = null;
 
@@ -335,15 +407,16 @@ async function onCellClick(row, col) {
                     : promotionPiece.toLowerCase();
             }
 
+            // Формируем строку хода для истории
             const fromName = PIECE_NAMES[fromPiece] || fromPiece;
             const fromSquare = `${String.fromCharCode(65 + fromCol)}${8 - fromRow}`;
             const toSquare = `${String.fromCharCode(65 + col)}${8 - row}`;
             let moveStr = `${fromName} ${fromSquare}→${toSquare}`;
-
             if (promotionPiece) {
                 moveStr += ` (=${PIECE_NAMES[board[row][col]] || board[row][col]})`;
             }
             
+            // Сохраняем ход в историю
             if (moveStr) {
                 moveHistory.push(moveStr);
                 window.moveHistory = moveHistory;
@@ -351,6 +424,7 @@ async function onCellClick(row, col) {
                 setStatus(`Ход: ${moveStr}`, 'success');
             }
 
+            // Отправляем ход на сервер
             if (window.socket) {
                 window.socket.emit('move', {
                     room_id: currentRoom,
@@ -551,7 +625,6 @@ window.createGame = async function() {
         showToast(`✅ Комната создана! ID: ${currentRoom}`, 'success');
         setStatus(`🏠 Комната ${currentRoom} создана. Отправьте ссылку другу`, 'info-msg');
         
-        // === ДОБАВЬТЕ ЭТО ===
         setTimeout(updateRoomLink, 100);
     } catch (error) {
         console.error('Error:', error);
@@ -581,7 +654,6 @@ window.joinGame = function() {
         console.log(`🔗 Присоединение к комнате ${currentRoom} как ${myName}`);
     }
     
-    // === ДОБАВЬТЕ ЭТО ===
     setTimeout(updateRoomLink, 100);
 };
 
@@ -594,6 +666,16 @@ window.resetBoard = function() {
         if (window.socket) {
             window.socket.emit('reset_board', { room_id: currentRoom });
         }
+        // Очищаем историю в chessRules
+        if (window.chessRules) {
+            window.chessRules.clearHistory();
+            console.log('✅ История chessRules очищена при сбросе');
+        }
+        // Очищаем локальную историю
+        moveHistory = [];
+        window.moveHistory = [];
+        updateHistoryDisplay();
+        updateUndoButton();
     }
 };
 
@@ -606,15 +688,24 @@ window.clearBoard = function() {
         if (window.socket) {
             window.socket.emit('clear_board', { room_id: currentRoom });
         }
+        // Очищаем историю в chessRules
+        if (window.chessRules) {
+            window.chessRules.clearHistory();
+            console.log('✅ История chessRules очищена при очистке');
+        }
+        // Очищаем локальную историю
+        moveHistory = [];
+        window.moveHistory = [];
+        updateHistoryDisplay();
+        updateUndoButton();
     }
 };
 
 window.flipBoard = function() {
     flipped = !flipped;
-    window.flipped = flipped; // Синхронизируем с глобальной переменной
+    window.flipped = flipped;
     renderBoard();
     
-    // Обновляем стрелки с учётом переворота
     if (window.arrowSystem) {
         setTimeout(() => {
             window.arrowSystem.setFlipped(flipped);
@@ -672,7 +763,6 @@ window.undoMove = function() {
 // === SOCKET СОБЫТИЯ ===
 window.socket.on('connect', () => {
     console.log('🔌 Подключено к серверу');
-    // Запрашиваем игроков после подключения
     if (window.currentRoom) {
         window.socket.emit('get_players', { room_id: window.currentRoom });
     }
@@ -685,6 +775,12 @@ window.socket.on('move_history_response', (data) => {
         moveHistory = data.move_history;
         window.moveHistory = moveHistory;
         console.log('📜 История загружена с сервера:', moveHistory.length);
+        
+        // Синхронизируем историю с chessRules
+        if (window.chessRules) {
+            window.chessRules.syncHistoryFromServer(moveHistory);
+            console.log('✅ История chessRules синхронизирована из move_history_response');
+        }
         
         if (window.undoManager) {
             window.undoManager.syncFromGame(
@@ -709,6 +805,7 @@ window.socket.on('joined', (data) => {
     currentRoom = data.room_id;
     window.currentRoom = currentRoom;
     
+    // === ОБНОВЛЯЕМ ИНФОРМАЦИЮ ОБ ИГРОКЕ ===
     myColor = data.player.color;
     players = data.players;
     flipped = (myColor === 'black');
@@ -716,42 +813,50 @@ window.socket.on('joined', (data) => {
     
     document.getElementById('roomDisplay').textContent = currentRoom;
     
-    // Синхронизируем с arrowSystem
+    // === СИНХРОНИЗИРУЕМ СТРЕЛКИ ===
     if (window.arrowSystem) {
         window.arrowSystem.currentRoom = currentRoom;
         window.arrowSystem.setFlipped(flipped);
     }
     
-    // Синхронизируем с undoManager
+    // === СИНХРОНИЗИРУЕМ UNDO ===
     if (window.undoManager) {
         window.undoManager.setRoom(currentRoom);
     }
     
-    // Синхронизируем правила при присоединении
+    // === СИНХРОНИЗИРУЕМ ПРАВИЛА ===
     if (data.rules_enabled !== undefined && window.chessRules) {
         window.chessRules.isEnabled = data.rules_enabled;
         setTimeout(updateRulesButton, 100);
         console.log(`♟️ Правила синхронизированы при присоединении: ${data.rules_enabled ? 'включены' : 'выключены'}`);
     }
     
-    // Сбрасываем историю
+    // === СБРАСЫВАЕМ ЛОКАЛЬНУЮ ИСТОРИЮ ===
     moveHistory = [];
     canUndo = false;
     window.canUndo = false;
     window.moveHistory = [];
+    
+    // Очищаем историю в chessRules
+    if (window.chessRules) {
+        window.chessRules.clearHistory();
+        console.log('✅ История chessRules очищена при присоединении');
+    }
+    
     updateUndoButton();
     
-    // Устанавливаем, чей ход (белые ходят первыми)
+    // === ОПРЕДЕЛЯЕМ, ЧЕЙ ХОД ===
     isMyTurn = (myColor === 'white');
     console.log(`♟️ ${isMyTurn ? 'Ваш' : 'Ход соперника'} ход`);
     
+    // === РЕНДЕРИМ ДОСКУ ===
     renderBoard();
     updateStatus();
-    
-    // Обновляем ссылку
     updateRoomLink();
     
-    // Запрашиваем историю с сервера
+    // ============================================
+    // ⚡ ЗАПРАШИВАЕМ ИСТОРИЮ С СЕРВЕРА
+    // ============================================
     if (window.socket && currentRoom) {
         setTimeout(function() {
             window.socket.emit('get_move_history', { room_id: currentRoom });
@@ -769,7 +874,6 @@ window.socket.on('players_update', (data) => {
     console.log('📥 players_update:', data);
     if (data.players) {
         players = data.players;
-        // Обновляем отображение
         updateSidebar();
         updateStatus();
         console.log('👥 Игроки обновлены:', players.length);
@@ -787,44 +891,6 @@ window.socket.on('rules_state', (data) => {
     }
 });
 
-window.joinGame = function() {
-    currentRoom = document.getElementById('roomInput').value.trim();
-    window.currentRoom = currentRoom;
-    myName = document.getElementById('playerName').value.trim() || 'Игрок';
-    
-    if (!currentRoom) {
-        if (typeof showToast === 'function') {
-            showToast('⚠️ Введите ID комнаты', 'error');
-        }
-        return;
-    }
-    
-    document.getElementById('roomDisplay').textContent = currentRoom;
-    
-    // Синхронизируем с arrowSystem
-    if (window.arrowSystem) {
-        window.arrowSystem.currentRoom = currentRoom;
-    }
-    
-    // Синхронизируем с undoManager
-    if (window.undoManager) {
-        window.undoManager.setRoom(currentRoom);
-    }
-    
-    if (window.socket) {
-        window.socket.emit('join', { 
-            room_id: currentRoom, 
-            name: myName 
-        });
-        console.log(`🔗 Присоединение к комнате ${currentRoom} как ${myName}`);
-    } else {
-        console.error('❌ Socket не инициализирован');
-        if (typeof showToast === 'function') {
-            showToast('❌ Нет соединения с сервером', 'error');
-        }
-    }
-};
-
 window.socket.on('board_update', (data) => {
     console.log('📥 board_update:', {
         has_move: !!data.move,
@@ -834,7 +900,21 @@ window.socket.on('board_update', (data) => {
         history_len: data.history_len || 0,
         move_history_len: data.move_history?.length || 0
     });
+
+    // ============================================
+    // ⚡ ЛОГИРУЕМ data.move (ЕСЛИ ЕСТЬ)
+    // ============================================
+    if (data.move) {
+        console.log('🔍 data.move:');
+        console.log('  from:', data.move.from);
+        console.log('  to:', data.move.to);
+        console.log('  piece:', data.move.piece);
+        console.log('  isCastling:', data.move.isCastling);
+        console.log('  promotion:', data.move.promotion);
+        console.log('🔍 _pendingMove:', window._pendingMove);
+    }
     
+    // === ОБНОВЛЯЕМ ДОСКУ ===
     board = data.board;
 
     // === ОБНОВЛЯЕМ ИГРОКОВ ===
@@ -842,16 +922,24 @@ window.socket.on('board_update', (data) => {
         players = data.players;
         console.log('👥 Игроки обновлены из board_update:', players.length);
     }
-    
     players = data.players || [];
     
-    // === СИНХРОНИЗАЦИЯ ИСТОРИИ ===
+    // ============================================
+    // ⚡ СИНХРОНИЗАЦИЯ ИСТОРИИ
+    // ============================================
     if (data.move_history) {
+        // Обновляем локальную историю
         moveHistory = data.move_history;
         window.moveHistory = moveHistory;
         console.log('📜 История синхронизирована с сервера:', moveHistory.length);
         
-        // Синхронизируем undoManager
+        // Синхронизируем с chessRules
+        if (window.chessRules) {
+            window.chessRules.syncHistoryFromServer(moveHistory);
+            console.log('✅ История chessRules синхронизирована');
+        }
+        
+        // Синхронизируем с undoManager
         if (window.undoManager) {
             window.undoManager.syncFromGame(
                 currentRoom,
@@ -864,40 +952,99 @@ window.socket.on('board_update', (data) => {
         updateHistoryDisplay();
         updateUndoButton();
     } else if (data.move && !data.undo) {
+        // ============================================
+        // ⚡ ПРИШЁЛ НОВЫЙ ХОД - ДОБАВЛЯЕМ В ИСТОРИЮ
+        // ============================================
+        
+        // Формируем строку хода
         const pieceName = PIECE_NAMES[data.move.piece] || data.move.piece;
         const fromSquare = `${String.fromCharCode(65 + data.move.from.col)}${8 - data.move.from.row}`;
         const toSquare = `${String.fromCharCode(65 + data.move.to.col)}${8 - data.move.to.row}`;
         
-        // === ПРОВЕРКА НА РОКИРОВКУ ===
         let moveStr;
         const piece = data.move.piece;
         const fromCol = data.move.from.col;
         const toCol = data.move.to.col;
         
-        // Проверяем, что это король и он переместился на 2 клетки по горизонтали
+        // Проверяем на рокировку
         if ((piece === 'K' || piece === 'k') && Math.abs(toCol - fromCol) === 2) {
-            // Это рокировка
-            if (toCol > fromCol) {
-                moveStr = 'O-O';  // Короткая рокировка
-            } else {
-                moveStr = 'O-O-O'; // Длинная рокировка
-            }
+            moveStr = (toCol > fromCol) ? 'O-O' : 'O-O-O';
         } else {
             moveStr = `${pieceName} ${fromSquare}→${toSquare}`;
-        }
-        
-        if (window.chessRules && window.chessRules.isEnabled) {
-            if (window.chessRules.isCheckmate(board)) {
-                moveStr += ' #';
-            } else if (window.chessRules.isInCheck(board)) {
-                moveStr += ' +';
+            if (data.move.promotion) {
+                const promoName = PIECE_NAMES[data.move.promotion] || data.move.promotion;
+                moveStr += ` (=${promoName})`;
             }
         }
-        moveHistory.push(moveStr);
-        window.moveHistory = moveHistory;
-        console.log('📜 Ход добавлен локально:', moveStr);
         
-        // Синхронизируем undoManager
+        // Добавляем шах/мат если есть
+        if (window.chessRules && window.chessRules.isEnabled) {
+            try {
+                const boardCopy = board.map(row => [...row]);
+                if (window.chessRules.isCheckmate(boardCopy)) {
+                    moveStr += ' #';
+                } else if (window.chessRules.isInCheck(boardCopy)) {
+                    moveStr += ' +';
+                }
+            } catch (e) {
+                // Игнорируем ошибки проверки шаха
+            }
+        }
+        
+        // Добавляем в историю (проверяем на дубликаты)
+        if (moveStr) {
+            const lastMove = moveHistory[moveHistory.length - 1];
+            if (lastMove !== moveStr) {
+                moveHistory.push(moveStr);
+                window.moveHistory = moveHistory;
+                document.getElementById('lastMove').textContent = moveStr;
+                console.log('📜 Ход добавлен в историю:', moveStr);
+            } else {
+                console.log('⏭️ Ход уже есть в истории, пропускаем дубликат');
+            }
+        }
+        
+        // ============================================
+        // ⚡ ДОБАВЛЯЕМ ХОД В ИСТОРИЮ chessRules (для рокировки)
+        // ============================================
+        if (window.chessRules && data.move) {
+            const piece = data.move.piece;
+            const fromCol = data.move.from.col;
+            const toCol = data.move.to.col;
+            const isCastling = (piece === 'K' || piece === 'k') && Math.abs(toCol - fromCol) === 2;
+            
+            // Используем _pendingMove для координат
+            let from = data.move.from;
+            let to = data.move.to;
+            
+            // Если сервер прислал (-1,-1), используем сохранённые координаты
+            if ((from.row === -1 || from.col === -1) && window._pendingMove) {
+                console.log('🔄 Используем сохранённые координаты для chessRules');
+                from = window._pendingMove.from;
+                to = window._pendingMove.to;
+                console.log('   from:', from);
+                console.log('   to:', to);
+            }
+            
+            // Добавляем в историю только если есть координаты
+            if (from.row !== -1 && from.col !== -1 && to.row !== -1 && to.col !== -1) {
+                window.chessRules.addMoveToHistory({
+                    piece: data.move.piece,
+                    from: from,
+                    to: to,
+                    isCastling: isCastling,
+                    promotion: data.move.promotion || null
+                });
+                console.log('✅ Ход добавлен в историю chessRules');
+            } else {
+                console.warn('⚠️ НЕ УДАЛОСЬ ДОБАВИТЬ ХОД В ИСТОРИЮ chessRules');
+            }
+        }
+        
+        // Очищаем _pendingMove после использования
+        window._pendingMove = null;
+        
+        // Синхронизируем с undoManager
         if (window.undoManager) {
             window.undoManager.syncFromGame(
                 currentRoom,
@@ -932,38 +1079,6 @@ window.socket.on('board_update', (data) => {
         lastMove.from = data.move.from;
         lastMove.to = data.move.to;
         
-        const pieceName = PIECE_NAMES[data.move.piece] || data.move.piece;
-        const fromSquare = `${String.fromCharCode(65 + data.move.from.col)}${8 - data.move.from.row}`;
-        const toSquare = `${String.fromCharCode(65 + data.move.to.col)}${8 - data.move.to.row}`;
-        
-        // === ПРОВЕРКА НА РОКИРОВКУ ===
-        let moveStr;
-        const piece = data.move.piece;
-        const fromCol = data.move.from.col;
-        const toCol = data.move.to.col;
-        
-        // Проверяем, что это король и он переместился на 2 клетки по горизонтали
-        if ((piece === 'K' || piece === 'k') && Math.abs(toCol - fromCol) === 2) {
-            // Это рокировка
-            if (toCol > fromCol) {
-                moveStr = 'O-O';  // Короткая рокировка
-            } else {
-                moveStr = 'O-O-O'; // Длинная рокировка
-            }
-        } else {
-            moveStr = `${pieceName} ${fromSquare}→${toSquare}`;
-        }
-        
-        // Добавляем шах/мат
-        if (window.chessRules && window.chessRules.isEnabled) {
-            if (window.chessRules.isCheckmate(board)) {
-                moveStr += ' #';
-            } else if (window.chessRules.isInCheck(board)) {
-                moveStr += ' +';
-            }
-        }
-        document.getElementById('lastMove').textContent = moveStr;
-        
         if (window.moveHighlight) {
             window.moveHighlight.setLastMove(data.move);
         }
@@ -974,7 +1089,6 @@ window.socket.on('board_update', (data) => {
     if (data.can_undo !== undefined) {
         canUndo = data.can_undo;
         window.canUndo = canUndo;
-        // Синхронизируем с undoManager
         if (window.undoManager) {
             window.undoManager.canUndo = canUndo;
             window.undoManager.updateUI();
@@ -992,19 +1106,28 @@ window.socket.on('board_update', (data) => {
     if (data.undo) {
         showToast('↩️ Ход отменён', 'info');
         
-        // Синхронизируем историю с сервера
         if (data.move_history) {
             moveHistory = data.move_history;
             window.moveHistory = moveHistory;
             console.log('📜 История обновлена после отмены (с сервера):', moveHistory.length);
+            
+            // Синхронизируем историю с chessRules
+            if (window.chessRules) {
+                window.chessRules.syncHistoryFromServer(moveHistory);
+                console.log('✅ История chessRules синхронизирована после отмены');
+            }
         } else if (moveHistory.length > 0) {
-            // Если сервер не вернул историю, удаляем последний ход локально
             moveHistory.pop();
             window.moveHistory = moveHistory;
             console.log('📜 История обновлена после отмены (локально):', moveHistory.length);
+            
+            // Удаляем последний ход из истории chessRules
+            if (window.chessRules && window.chessRules.moveHistory.length > 0) {
+                window.chessRules.moveHistory.pop();
+                console.log('✅ Последний ход удалён из истории chessRules');
+            }
         }
         
-        // Синхронизируем undoManager
         if (window.undoManager) {
             window.undoManager.syncFromGame(
                 currentRoom,
@@ -1026,6 +1149,7 @@ window.socket.on('board_update', (data) => {
             window.moveHighlight.clearLastMove();
         }
         window.lastMoveData = null;
+        window._pendingMove = null;
         
         updateUndoButton();
         updateHistoryDisplay();
@@ -1040,6 +1164,14 @@ window.socket.on('board_update', (data) => {
         lastMove.to = null;
         moveHistory = [];
         window.moveHistory = [];
+        window._pendingMove = null;
+        
+        // Очищаем историю chessRules
+        if (window.chessRules) {
+            window.chessRules.clearHistory();
+            console.log('✅ История chessRules очищена при сбросе');
+        }
+        
         if (window.undoManager) {
             window.undoManager.clearHistory();
         }
@@ -1064,6 +1196,14 @@ window.socket.on('board_update', (data) => {
         lastMove.to = null;
         moveHistory = [];
         window.moveHistory = [];
+        window._pendingMove = null;
+        
+        // Очищаем историю chessRules
+        if (window.chessRules) {
+            window.chessRules.clearHistory();
+            console.log('✅ История chessRules очищена при очистке');
+        }
+        
         if (window.undoManager) {
             window.undoManager.clearHistory();
         }
@@ -1081,11 +1221,11 @@ window.socket.on('board_update', (data) => {
     }
 });
 
+
 window.socket.on('error', (data) => {
     showToast(`❌ ${data.message}`, 'error');
     setStatus(`❌ ${data.message}`, 'error');
 });
-
 
 // === КНОПКА ПРАВИЛ ===
 window.toggleRules = function() {
@@ -1097,16 +1237,21 @@ window.toggleRules = function() {
         return;
     }
     
-    // Переключаем состояние
     window.chessRules.setEnabled(!window.chessRules.isEnabled);
     updateRulesButton();
     
-    // Обновляем статус
+    // Отправляем на сервер
+    if (window.socket && window.currentRoom) {
+        window.socket.emit('toggle_rules', {
+            room_id: window.currentRoom
+        });
+        console.log('📤 Отправка состояния правил на сервер');
+    }
+    
     if (typeof updateStatus === 'function') {
         updateStatus();
     }
     
-    // Показываем уведомление
     if (typeof showToast === 'function') {
         showToast(window.chessRules.isEnabled ? '✅ Правила включены' : '⛔ Правила выключены', 'info');
     }
@@ -1171,38 +1316,6 @@ function updateRulesButton() {
     btn.appendChild(indicator);
 }
 
-// === КНОПКА ПРАВИЛ ===
-window.toggleRules = function() {
-    if (!window.chessRules) {
-        console.warn('⚠️ chessRules не найден');
-        if (typeof showToast === 'function') {
-            showToast('⚠️ Система правил не загружена', 'error');
-        }
-        return;
-    }
-    
-    // Переключаем состояние локально
-    window.chessRules.setEnabled(!window.chessRules.isEnabled);
-    updateRulesButton();
-    
-    // Отправляем на сервер
-    if (window.socket && window.currentRoom) {
-        window.socket.emit('toggle_rules', {
-            room_id: window.currentRoom
-        });
-        console.log('📤 Отправка состояния правил на сервер');
-    }
-    
-    // Обновляем статус
-    if (typeof updateStatus === 'function') {
-        updateStatus();
-    }
-    
-    if (typeof showToast === 'function') {
-        showToast(window.chessRules.isEnabled ? '✅ Правила включены' : '⛔ Правила выключены', 'info');
-    }
-};
-
 // === СИНХРОНИЗАЦИЯ ПРАВИЛ С СЕРВЕРА ===
 function syncRulesFromServer(enabled) {
     if (!window.chessRules) {
@@ -1210,11 +1323,9 @@ function syncRulesFromServer(enabled) {
         return;
     }
     
-    // Обновляем состояние
     window.chessRules.setEnabled(enabled);
     updateRulesButton();
     
-    // Обновляем статус
     if (typeof updateStatus === 'function') {
         updateStatus();
     }
@@ -1227,12 +1338,10 @@ function initRulesButton() {
     const btn = document.getElementById('rulesToggle');
     if (!btn) return;
     
-    // Устанавливаем начальное состояние (по умолчанию включены)
     if (window.chessRules) {
         window.chessRules.isEnabled = true;
         updateRulesButton();
     } else {
-        // Если chessRules ещё не загружен, ждём
         const checkInterval = setInterval(function() {
             if (window.chessRules) {
                 window.chessRules.isEnabled = true;
@@ -1242,7 +1351,6 @@ function initRulesButton() {
             }
         }, 100);
         
-        // Таймаут на случай, если не загрузится
         setTimeout(function() {
             clearInterval(checkInterval);
             if (!window.chessRules) {
@@ -1252,76 +1360,14 @@ function initRulesButton() {
     }
 }
 
-// === ИНИЦИАЛИЗАЦИЯ ===
-console.log('🚀 Загрузка script.js');
-board = initialBoard();
-
-// Экспортируем глобальные переменные
-window.canUndo = canUndo;
-window.moveHistory = moveHistory;
-
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function() {
-        console.log('📄 DOM загружен');
-        renderBoard();
-        updateUndoButton();
-        
-        const params = new URLSearchParams(window.location.search);
-        const room = params.get('room');
-        if (room) {
-            document.getElementById('roomInput').value = room;
-            document.getElementById('roomDisplay').textContent = room;
-            setTimeout(window.joinGame, 500);
-        }
-    });
-} else {
-    renderBoard();
-    updateUndoButton();
-    initRulesButton();
-}
-
-console.log('✅ script.js загружен');
-
-// ============================================
-// СИНХРОНИЗАЦИЯ UNDOMANAGER С ИГРОЙ
-// ============================================
-
-// Функция синхронизации
-function syncUndoManager() {
-    if (window.undoManager) {
-        console.log('🔄 Синхронизация undoManager...');
-        console.log('  currentRoom:', currentRoom);
-        console.log('  moveHistory length:', moveHistory.length);
-        console.log('  canUndo:', canUndo);
-        
-        // Проверяем: если история пуста, но canUndo true — сбрасываем
-        if (moveHistory.length === 0 && canUndo) {
-            console.log('⚠️ История пуста, но canUndo=true — сбрасываем');
-            canUndo = false;
-            window.canUndo = false;
-        }
-        
-        window.undoManager.syncFromGame(
-            currentRoom,
-            moveHistory,
-            canUndo
-        );
-        console.log('✅ undoManager синхронизирован');
-    } else {
-        console.warn('⚠️ undoManager не найден для синхронизации');
-    }
-}
-
+// === ФУНКЦИЯ ОБНОВЛЕНИЯ ССЫЛКИ ===
 function updateRoomLink() {
-    // Пробуем получить из элемента
     let roomId = document.getElementById('roomDisplay')?.textContent;
     
-    // Если пусто - пробуем из переменной
     if (!roomId || roomId === '—' || roomId === '') {
         roomId = currentRoom;
     }
     
-    // Если всё ещё пусто - пробуем из URL
     if (!roomId || roomId === '—' || roomId === '') {
         const params = new URLSearchParams(window.location.search);
         roomId = params.get('room');
@@ -1338,38 +1384,32 @@ function updateRoomLink() {
     }
 }
 
+// === ИНИЦИАЛИЗАЦИЯ ===
+console.log('🚀 Загрузка script.js');
+board = initialBoard();
 
-// Вызываем синхронизацию после каждого обновления
-const originalBoardUpdate = window.socket?.on ? 
-    window.socket.on.bind(window.socket) : null;
+window.canUndo = canUndo;
+window.moveHistory = moveHistory;
 
-if (window.socket && window.socket.on) {
-    // Сохраняем оригинальный обработчик
-    const originalHandler = window.socket.on;
-    
-    window.socket.on = function(event, callback) {
-        if (event === 'board_update') {
-            const wrappedCallback = function(data) {
-                // Вызываем оригинальный callback
-                callback(data);
-                
-                // Синхронизируем undoManager
-                setTimeout(syncUndoManager, 50);
-            };
-            originalHandler.call(window.socket, event, wrappedCallback);
-        } else {
-            originalHandler.call(window.socket, event, callback);
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('📄 DOM загружен');
+        renderBoard();
+        updateUndoButton();
+        initRulesButton();
+        
+        const params = new URLSearchParams(window.location.search);
+        const room = params.get('room');
+        if (room) {
+            document.getElementById('roomInput').value = room;
+            document.getElementById('roomDisplay').textContent = room;
+            setTimeout(window.joinGame, 500);
         }
-    };
+    });
+} else {
+    renderBoard();
+    updateUndoButton();
+    initRulesButton();
 }
 
-// Синхронизируем при загрузке
-document.addEventListener('DOMContentLoaded', function() {
-    setTimeout(syncUndoManager, 100);
-});
-
-// Синхронизируем после каждого хода
-// Убираем обёртку, так как она ломает рокировку
-// Вместо этого добавляем синхронизацию в конец onCellClick
-
-console.log('✅ Синхронизация undoManager настроена');
+console.log('✅ script.js загружен');
