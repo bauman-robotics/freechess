@@ -178,7 +178,8 @@ function renderBoard() {
 }
 
 // === ОБРАБОТКА КЛИКА ===
-function onCellClick(row, col) {
+// === ОБРАБОТКА КЛИКА ===
+async function onCellClick(row, col) {
     console.log(`🖱️ Клик по клетке ${row},${col}`);
     if (!currentRoom) {
         showToast('Сначала присоединитесь к игре!', 'info');
@@ -219,6 +220,12 @@ function onCellClick(row, col) {
         
         let moveStr = '';
         const isCastlingMove = (fromPiece === 'K' || fromPiece === 'k') && Math.abs(col - fromCol) === 2;
+
+        // === ПРЕВРАЩЕНИЕ ПЕШКИ ===
+        let promotionPiece = null;
+        if (!isCastlingMove && window.pawnPromotion && window.pawnPromotion.isPromotionMove(fromPiece, row)) {
+            promotionPiece = await window.pawnPromotion.ask(myColor); // 'q' | 'r' | 'b' | 'n'
+        }
         
         // === ПРОВЕРКА ПРАВИЛ ===
         if (window.chessRules && window.chessRules.isEnabled) {
@@ -285,7 +292,7 @@ function onCellClick(row, col) {
                 }
                 
                 // Выполняем ход через chess.js
-                const newBoard = window.chessRules.makeMove(fromRow, fromCol, row, col, board, myColor);
+                const newBoard = window.chessRules.makeMove(fromRow, fromCol, row, col, board, myColor, promotionPiece);
                 if (newBoard) {
                     board = newBoard;
                 } else {
@@ -293,20 +300,43 @@ function onCellClick(row, col) {
                     board[row][col] = fromPiece;
                     board[fromRow][fromCol] = null;
                 }
+
+                // Если превращение выбрано, но chessRules.makeMove его не применил
+                // (например, работает только с обычным перемещением) — подстрахуемся сами
+                if (promotionPiece) {
+                    board[row][col] = myColor === 'white'
+                        ? promotionPiece.toUpperCase()
+                        : promotionPiece.toLowerCase();
+                }
                 
                 const fromName = PIECE_NAMES[fromPiece] || fromPiece;
                 const fromSquare = `${String.fromCharCode(65 + fromCol)}${8 - fromRow}`;
                 const toSquare = `${String.fromCharCode(65 + col)}${8 - row}`;
                 moveStr = `${fromName} ${fromSquare}→${toSquare}`;
+
+                if (promotionPiece) {
+                    moveStr += ` (=${PIECE_NAMES[board[row][col]] || board[row][col]})`;
+                }
             }
         } else {
             // Если правила выключены - просто перемещаем
             board[row][col] = fromPiece;
             board[fromRow][fromCol] = null;
+
+            if (promotionPiece) {
+                board[row][col] = myColor === 'white'
+                    ? promotionPiece.toUpperCase()
+                    : promotionPiece.toLowerCase();
+            }
+
             const fromName = PIECE_NAMES[fromPiece] || fromPiece;
             const fromSquare = `${String.fromCharCode(65 + fromCol)}${8 - fromRow}`;
             const toSquare = `${String.fromCharCode(65 + col)}${8 - row}`;
             moveStr = `${fromName} ${fromSquare}→${toSquare}`;
+
+            if (promotionPiece) {
+                moveStr += ` (=${PIECE_NAMES[board[row][col]] || board[row][col]})`;
+            }
         }
         
         lastMove.from = { row: fromRow, col: fromCol };
@@ -336,7 +366,8 @@ function onCellClick(row, col) {
                 room_id: currentRoom,
                 from: { row: fromRow, col: fromCol },
                 to: { row: row, col: col },
-                isCastling: false
+                isCastling: false,
+                promotion: promotionPiece
             });
         }
 
