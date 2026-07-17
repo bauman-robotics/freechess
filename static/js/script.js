@@ -521,7 +521,7 @@ function updateSidebar() {
     
     // === ЦВЕТ ИГРОКА ===
     const colorEmoji = myColor === 'white' ? '⚪' : myColor === 'black' ? '⚫' : '❓';
-    const colorName = myColor === 'white' ? 'белых' : myColor === 'black' ? 'черных' : '—';
+    const colorName = myColor === 'white' ? 'за белых' : myColor === 'black' ? 'за черных' : '—';
     document.getElementById('colorDisplay').textContent = `${colorEmoji} Вы: ${colorName}`;
     
     // === ССЫЛКА НА КОМНАТУ ===
