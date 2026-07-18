@@ -505,6 +505,7 @@ def handle_draw_arrow(data):
     
     games[room_id]['arrows'].append(arrow)
     
+    # ОТПРАВЛЯЕМ ВСЕМ В КОМНАТЕ
     emit('arrow_drawn', {
         'arrow': arrow,
         'room_id': room_id
@@ -515,8 +516,14 @@ def handle_clear_arrows(data):
     room_id = data.get('room_id')
     if room_id not in games:
         return
+    
+    # Очищаем стрелки в памяти сервера
     games[room_id]['arrows'] = []
+    
+    # ОТПРАВЛЯЕМ ВСЕМ В КОМНАТЕ, а не только отправителю!
     emit('arrows_cleared', {'room_id': room_id}, room=room_id)
+    
+    print(f'🧹 Стрелки очищены в комнате {room_id} (всем участникам)')
 
 @socketio.on('get_move_history')
 def handle_get_move_history(data):
