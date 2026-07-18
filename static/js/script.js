@@ -546,6 +546,17 @@ function updateSidebar() {
     
     // === ИСТОРИЯ ХОДОВ ===
     updateHistoryDisplay();
+    
+    // ============================================
+    // ⚡ ОБНОВЛЯЕМ СЧЁТЧИК ХОДОВ ДЛЯ ОТМЕНЫ
+    // ============================================
+    const undoCount = document.getElementById('undoCount');
+    if (undoCount) {
+        // Берём длину из глобальной истории или из undoManager
+        const historyLength = window.moveHistory ? window.moveHistory.length : 0;
+        undoCount.textContent = historyLength;
+        console.log('🔄 undoCount обновлён из sidebar:', historyLength);
+    }
 }
 
 // ============================================

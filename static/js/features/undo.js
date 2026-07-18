@@ -1,3 +1,5 @@
+// static/js/features/undo.js
+
 // ============================================
 // МОДУЛЬ УПРАВЛЕНИЯ ОТМЕНОЙ ХОДОВ (UNDO)
 // ============================================
@@ -46,7 +48,7 @@ class UndoManager {
             console.log('✅ Глобальная история синхронизирована, длина:', window.moveHistory.length);
         }
         
-        console.log('✅ UndoManager синхронизирован');
+        console.log('✅ UndoManager синхронизирован, ходов:', this.history.length);
     }
     
     undoMove() {
@@ -163,44 +165,106 @@ class UndoManager {
             self.updateUI();
         });
         
+        // ============================================
+        // ⚡ СЛУШАЕМ board_update ДЛЯ СИНХРОНИЗАЦИИ
+        // ============================================
         this.socket.on('board_update', function(data) {
+            console.log('📥 board_update в undoManager:', {
+                has_move: !!data.move,
+                can_undo: data.can_undo,
+                move_history_len: data.move_history?.length || 0,
+                undo: !!data.undo
+            });
+            
             if (self.isProcessing) {
                 console.log('🔄 Сброс isProcessing');
                 self.isProcessing = false;
             }
+            
+            // ============================================
+            // ⚡ ОБНОВЛЯЕМ ИСТОРИЮ ИЗ ДАННЫХ
+            // ============================================
+            if (data.move_history) {
+                console.log('📜 Обновление истории из board_update, длина:', data.move_history.length);
+                self.history = data.move_history.map(function(move) {
+                    return {
+                        move: typeof move === 'string' ? move : (move.move || move),
+                        timestamp: Date.now()
+                    };
+                });
+                
+                // Синхронизируем глобальную историю
+                if (typeof window !== 'undefined') {
+                    window.moveHistory = data.move_history;
+                    console.log('✅ Глобальная история обновлена, длина:', window.moveHistory.length);
+                }
+            }
+            
+            // Обновляем canUndo
             if (data.can_undo !== undefined) {
                 self.canUndo = data.can_undo;
-                self.updateUI();
+                console.log('🔄 canUndo обновлён:', self.canUndo);
+            } else {
+                // Если can_undo не пришёл, вычисляем по длине истории
+                self.canUndo = self.history.length > 0;
             }
-            if (data.undo) {
-                self.isProcessing = false;
-                self.updateUI();
+            
+            // Если это отмена - удаляем последний ход из истории
+            if (data.undo && self.history.length > 0) {
+                self.history.pop();
+                self.canUndo = self.history.length > 0;
+                if (typeof window !== 'undefined' && window.moveHistory && window.moveHistory.length > 0) {
+                    window.moveHistory.pop();
+                    window.canUndo = self.canUndo;
+                }
+                console.log('↩️ Ход удалён из истории после отмены, осталось:', self.history.length);
             }
+            
+            // Если это сброс или очистка - очищаем историю
             if (data.reset || data.clear) {
                 self.clearHistory();
+                console.log('🔄 История очищена (reset/clear)');
             }
+            
+            // Обновляем UI
+            self.updateUI();
+            
+            console.log('✅ UndoManager обновлён, ходов:', self.history.length, 'canUndo:', self.canUndo);
         });
     }
     
     updateUI() {
+        // Обновляем кнопку отмены
         var btn = document.getElementById('undoBtn');
         if (btn) {
             btn.disabled = !this.canUndo || this.isProcessing;
             btn.style.opacity = (this.canUndo && !this.isProcessing) ? '1' : '0.5';
             btn.title = this.canUndo ? 'Отменить последний ход' : 'Нет ходов для отмены';
+            
+            // Обновляем бейдж
             var badge = document.getElementById('undoBadge');
             if (badge) {
                 badge.textContent = this.history.length;
                 badge.style.display = this.history.length > 0 ? 'inline' : 'none';
             }
         }
+        
+        // Обновляем счётчик ходов для отмены в сайдбаре
         var undoCount = document.getElementById('undoCount');
         if (undoCount) {
             undoCount.textContent = this.history.length;
+            console.log('🔄 undoCount обновлён:', this.history.length);
         }
+        
+        // Обновляем счётчик истории
         var historyCount = document.getElementById('historyCount');
         if (historyCount) {
             historyCount.textContent = this.history.length;
+        }
+        
+        // Также обновляем глобальные переменные
+        if (typeof window !== 'undefined') {
+            window.canUndo = this.canUndo;
         }
     }
     
