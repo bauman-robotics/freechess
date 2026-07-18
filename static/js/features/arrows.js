@@ -10,9 +10,9 @@ class ArrowSystem {
         
         this.socket = socketManager;
         this.arrows = [];
-        this.arrowMode = true; // ВСЕГДА ВКЛЮЧЕН
-        this.flipped = false; 
-        this.currentColor = '#00aa44';  // Тёмно-зелёный/изумрудный
+        this.arrowMode = true;
+        this.flipped = false;
+        this.currentColor = '#00aa44';
         this.colors = ['#00aa44', '#ff0000', '#ffff00', '#00aaff', '#ff00ff', '#ff8800', '#ff1493', '#00ffcc'];
         this.colorIndex = 0;
         this.isDrawing = false;
@@ -22,12 +22,17 @@ class ArrowSystem {
         this.boardElement = null;
         this.isInitialized = false;
         this.currentRoom = null;
+        this.renderTimeout = null;
+        this.lastRenderTime = 0;
+        this.renderQueue = [];
+        this.isRendering = false;
         
         // Привязка методов
         this.onMouseDown = this.onMouseDown.bind(this);
         this.onMouseMove = this.onMouseMove.bind(this);
         this.onMouseUp = this.onMouseUp.bind(this);
         this.onContextMenu = this.onContextMenu.bind(this);
+        this.throttledRender = this.throttledRender.bind(this);
         
         // Сразу инициализируем
         this.init();
@@ -64,17 +69,225 @@ class ArrowSystem {
         this.setupEventListeners();
         this.setupSocketEvents();
         this.updateColorButton();
-        
-        // Подписываемся на изменения комнаты
         this.setupRoomListener();
         
-        console.log('🎯 Система стрелок настроена (режим всегда включён)');
-        console.log('  - boardElement:', !!this.boardElement);
-        console.log('  - socket:', !!this.socket);
+        console.log('🎯 Система стрелок настроена');
     }
     
+    // ============================================
+    // ОПТИМИЗИРОВАННЫЙ РЕНДЕРИНГ С ПЛАВНОСТЬЮ
+    // ============================================
+    
+    throttledRender() {
+        // Очищаем предыдущий таймаут
+        if (this.renderTimeout) {
+            clearTimeout(this.renderTimeout);
+            this.renderTimeout = null;
+        }
+        
+        // Если рендеринг уже идёт, просто добавляем в очередь
+        if (this.isRendering) {
+            this.renderQueue.push(Date.now());
+            return;
+        }
+        
+        // Запускаем рендеринг с небольшой задержкой для группировки обновлений
+        this.renderTimeout = setTimeout(() => {
+            this.renderTimeout = null;
+            this.performRender();
+        }, 16); // ~1 кадр при 60fps
+    }
+    
+    performRender() {
+        if (this.isRendering) {
+            return;
+        }
+        
+        this.isRendering = true;
+        
+        try {
+            // Удаляем старые стрелки
+            const oldArrows = document.querySelectorAll('.board-arrows');
+            oldArrows.forEach(el => {
+                // Плавное исчезновение вместо мгновенного удаления
+                el.style.transition = 'opacity 0.15s ease-out';
+                el.style.opacity = '0';
+                setTimeout(() => {
+                    if (el.parentNode) {
+                        el.parentNode.removeChild(el);
+                    }
+                }, 150);
+            });
+            
+            // Если нет стрелок, просто выходим
+            if (!this.arrows || this.arrows.length === 0) {
+                this.isRendering = false;
+                return;
+            }
+            
+            const boardEl = this.boardElement;
+            if (!boardEl) {
+                this.isRendering = false;
+                return;
+            }
+            
+            // Создаём новые стрелки с плавным появлением
+            setTimeout(() => {
+                this.renderArrows();
+                this.isRendering = false;
+                
+                // Проверяем, есть ли ещё запросы в очереди
+                if (this.renderQueue.length > 0) {
+                    this.renderQueue = [];
+                    this.throttledRender();
+                }
+            }, 50);
+            
+        } catch (error) {
+            console.error('❌ Ошибка при рендере стрелок:', error);
+            this.isRendering = false;
+        }
+    }
+    
+    renderArrows() {
+        const boardEl = this.boardElement;
+        if (!boardEl) return;
+        
+        try {
+            const rect = boardEl.getBoundingClientRect();
+            const cellSize = rect.width / 8;
+            
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('class', 'board-arrows');
+            svg.style.cssText = `
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                pointer-events: none;
+                z-index: 10;
+                opacity: 0;
+                transition: opacity 0.2s ease-in;
+            `;
+            
+            const isFlipped = window.flipped || false;
+            
+            this.arrows.forEach((arrow) => {
+                let fromRow = arrow.from.row;
+                let fromCol = arrow.from.col;
+                let toRow = arrow.to.row;
+                let toCol = arrow.to.col;
+                
+                if (isFlipped) {
+                    fromRow = 7 - fromRow;
+                    fromCol = 7 - fromCol;
+                    toRow = 7 - toRow;
+                    toCol = 7 - toCol;
+                }
+                
+                const fromX = (fromCol + 0.5) * cellSize;
+                const fromY = (fromRow + 0.5) * cellSize;
+                const toX = (toCol + 0.5) * cellSize;
+                const toY = (toRow + 0.5) * cellSize;
+                
+                this.drawArrow(svg, fromX, fromY, toX, toY, arrow.color);
+            });
+            
+            boardEl.style.position = 'relative';
+            boardEl.appendChild(svg);
+            
+            // Плавное появление
+            requestAnimationFrame(() => {
+                svg.style.opacity = '1';
+            });
+            
+        } catch (error) {
+            console.error('❌ Ошибка при создании стрелок:', error);
+        }
+    }
+    
+    // Старый метод render теперь вызывает оптимизированную версию
+    render() {
+        this.throttledRender();
+    }
+    
+    // ============================================
+    // ВРЕМЕННАЯ СТРЕЛКА (БЕЗ МЕРЦАНИЯ)
+    // ============================================
+    
+    createTemporaryArrow(fromRow, fromCol, toRow, toCol) {
+        this.removeTemporaryArrow();
+        
+        const boardEl = this.boardElement;
+        if (!boardEl) return;
+        
+        const rect = boardEl.getBoundingClientRect();
+        const cellSize = rect.width / 8;
+        
+        const fromX = (fromCol + 0.5) * cellSize;
+        const fromY = (fromRow + 0.5) * cellSize;
+        const toX = (toCol + 0.5) * cellSize;
+        const toY = (toRow + 0.5) * cellSize;
+        
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.id = 'tempArrow';
+        svg.style.cssText = `
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+            opacity: 0.8;
+        `;
+        
+        this.drawArrow(svg, fromX, fromY, toX, toY, this.currentColor);
+        
+        boardEl.style.position = 'relative';
+        boardEl.appendChild(svg);
+        this.tempArrow = svg;
+    }
+    
+    updateTemporaryArrow(fromRow, fromCol, toRow, toCol) {
+        if (!this.tempArrow) return;
+        
+        const svg = this.tempArrow;
+        const rect = this.boardElement.getBoundingClientRect();
+        const cellSize = rect.width / 8;
+        
+        const fromX = (fromCol + 0.5) * cellSize;
+        const fromY = (fromRow + 0.5) * cellSize;
+        const toX = (toCol + 0.5) * cellSize;
+        const toY = (toRow + 0.5) * cellSize;
+        
+        while (svg.firstChild) {
+            svg.removeChild(svg.firstChild);
+        }
+        
+        this.drawArrow(svg, fromX, fromY, toX, toY, this.currentColor);
+    }
+    
+    removeTemporaryArrow() {
+        if (this.tempArrow) {
+            // Плавное исчезновение временной стрелки
+            this.tempArrow.style.transition = 'opacity 0.15s ease-out';
+            this.tempArrow.style.opacity = '0';
+            setTimeout(() => {
+                if (this.tempArrow && this.tempArrow.parentNode) {
+                    this.tempArrow.parentNode.removeChild(this.tempArrow);
+                }
+                this.tempArrow = null;
+            }, 150);
+        }
+    }
+    
+    // ============================================
+    // ОСТАЛЬНЫЕ МЕТОДЫ (без изменений)
+    // ============================================
+    
     setupRoomListener() {
-        // Слушаем изменения комнаты
         const roomDisplay = document.getElementById('roomDisplay');
         if (roomDisplay) {
             const observer = new MutationObserver(() => {
@@ -87,7 +300,6 @@ class ArrowSystem {
             observer.observe(roomDisplay, { childList: true, characterData: true, subtree: true });
         }
         
-        // Если комната уже есть
         const roomId = document.getElementById('roomDisplay')?.textContent;
         if (roomId && roomId !== '—') {
             this.currentRoom = roomId;
@@ -95,9 +307,7 @@ class ArrowSystem {
         }
     }
     
-    // === УПРАВЛЕНИЕ РЕЖИМОМ ===
     toggleMode() {
-        // Режим всегда включён, просто возвращаем true
         this.arrowMode = true;
         if (typeof showToast === 'function') {
             showToast('📐 Режим стрелок всегда включён', 'info');
@@ -134,10 +344,7 @@ class ArrowSystem {
         
         console.log('🧹 Отправка clear_arrows в комнату:', roomId);
         
-        // Отправляем на сервер
         this.socket.emit('clear_arrows', { room_id: roomId });
-        
-        // Локально очищаем сразу (оптимистичное обновление)
         this.arrows = [];
         this.render();
         
@@ -146,7 +353,6 @@ class ArrowSystem {
         }
     }
     
-    // === ОБРАБОТЧИКИ СОБЫТИЙ ===
     setupEventListeners() {
         document.addEventListener('contextmenu', this.onContextMenu);
         this.boardElement.addEventListener('mousedown', this.onMouseDown);
@@ -164,7 +370,6 @@ class ArrowSystem {
     }
     
     onContextMenu(e) {
-        // Режим всегда включён, поэтому всегда блокируем контекстное меню на доске
         e.preventDefault();
         return false;
     }
@@ -178,7 +383,6 @@ class ArrowSystem {
         let row = parseInt(cell.dataset.row);
         let col = parseInt(cell.dataset.col);
         
-        // Если доска перевёрнута, конвертируем координаты обратно
         const isFlipped = window.flipped || false;
         if (isFlipped) {
             row = 7 - row;
@@ -211,7 +415,6 @@ class ArrowSystem {
         let row = parseInt(cell.dataset.row);
         let col = parseInt(cell.dataset.col);
         
-        // Если доска перевёрнута, конвертируем координаты обратно
         const isFlipped = window.flipped || false;
         if (isFlipped) {
             row = 7 - row;
@@ -235,7 +438,6 @@ class ArrowSystem {
             return;
         }
         
-        // Получаем координаты из dataset (уже с учётом переворота)
         let row = parseInt(cell.dataset.row);
         let col = parseInt(cell.dataset.col);
         
@@ -251,7 +453,6 @@ class ArrowSystem {
             let toRow = this.endCell.row;
             let toCol = this.endCell.col;
             
-            // Если доска перевёрнута, конвертируем координаты обратно
             const isFlipped = window.flipped || false;
             if (isFlipped) {
                 fromRow = 7 - fromRow;
@@ -266,9 +467,6 @@ class ArrowSystem {
                 if (roomId && roomId !== '—') {
                     console.log('📤 Отправка стрелки:', { fromRow, fromCol, toRow, toCol });
                     
-                    // ============================================
-                    // ⚡ СОЗДАЁМ СТРЕЛКУ ЛОКАЛЬНО (ОПТИМИСТИЧНОЕ ОБНОВЛЕНИЕ)
-                    // ============================================
                     const arrow = {
                         id: `arrow_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
                         from: { row: fromRow, col: fromCol },
@@ -277,85 +475,21 @@ class ArrowSystem {
                         player_id: this.socket.id || 'local'
                     };
                     
-                    // Добавляем локально
                     this.arrows.push(arrow);
                     this.render();
                     
-                    // Отправляем на сервер
                     this.socket.emit('draw_arrow', {
                         room_id: roomId,
                         from: { row: fromRow, col: fromCol },
                         to: { row: toRow, col: toCol },
                         color: this.currentColor
                     });
-                    
-                    if (typeof showToast === 'function') {
-                        showToast('📐 Стрелка нарисована', 'info');
-                    }
                 }
             }
         }
         
         this.startCell = null;
         this.endCell = null;
-    }
-    
-    // === ОТРИСОВКА СТРЕЛОК ===
-    createTemporaryArrow(fromRow, fromCol, toRow, toCol) {
-        this.removeTemporaryArrow();
-        
-        const boardEl = this.boardElement;
-        if (!boardEl) return;
-        
-        const rect = boardEl.getBoundingClientRect();
-        const cellSize = rect.width / 8;
-        
-        const fromX = (fromCol + 0.5) * cellSize;
-        const fromY = (fromRow + 0.5) * cellSize;
-        const toX = (toCol + 0.5) * cellSize;
-        const toY = (toRow + 0.5) * cellSize;
-        
-        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        svg.id = 'tempArrow';
-        svg.style.position = 'absolute';
-        svg.style.top = '0';
-        svg.style.left = '0';
-        svg.style.width = '100%';
-        svg.style.height = '100%';
-        svg.style.pointerEvents = 'none';
-        svg.style.zIndex = '10';
-        
-        this.drawArrow(svg, fromX, fromY, toX, toY, this.currentColor);
-        
-        boardEl.style.position = 'relative';
-        boardEl.appendChild(svg);
-        this.tempArrow = svg;
-    }
-    
-    updateTemporaryArrow(fromRow, fromCol, toRow, toCol) {
-        if (!this.tempArrow) return;
-        
-        const svg = this.tempArrow;
-        const rect = this.boardElement.getBoundingClientRect();
-        const cellSize = rect.width / 8;
-        
-        const fromX = (fromCol + 0.5) * cellSize;
-        const fromY = (fromRow + 0.5) * cellSize;
-        const toX = (toCol + 0.5) * cellSize;
-        const toY = (toRow + 0.5) * cellSize;
-        
-        while (svg.firstChild) {
-            svg.removeChild(svg.firstChild);
-        }
-        
-        this.drawArrow(svg, fromX, fromY, toX, toY, this.currentColor);
-    }
-    
-    removeTemporaryArrow() {
-        if (this.tempArrow) {
-            this.tempArrow.remove();
-            this.tempArrow = null;
-        }
     }
     
     drawArrow(svg, fromX, fromY, toX, toY, color) {
@@ -370,7 +504,6 @@ class ArrowSystem {
         const headAngle = 0.6;
         const lineWidth = 5;
         
-        // Основная линия
         const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
         line.setAttribute('x1', fromX);
         line.setAttribute('y1', fromY);
@@ -382,7 +515,6 @@ class ArrowSystem {
         line.setAttribute('opacity', '0.8');
         svg.appendChild(line);
         
-        // Головка стрелки
         const points = [
             [toX, toY],
             [toX - headLength * Math.cos(angle - headAngle), toY - headLength * Math.sin(angle - headAngle)],
@@ -398,72 +530,16 @@ class ArrowSystem {
         return svg;
     }
     
-    render() {
-        document.querySelectorAll('.board-arrows').forEach(el => el.remove());
-        
-        if (!this.arrows || this.arrows.length === 0) {
-            return;
-        }
-        
-        const boardEl = this.boardElement;
-        if (!boardEl) {
-            console.warn('⚠️ Board element not found');
-            return;
-        }
-        
-        try {
-            const rect = boardEl.getBoundingClientRect();
-            const cellSize = rect.width / 8;
-            
-            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            svg.setAttribute('class', 'board-arrows');
-            svg.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10;';
-            
-            // Проверяем, перевёрнута ли доска
-            const isFlipped = window.flipped || false;
-            
-            this.arrows.forEach((arrow) => {
-                let fromRow = arrow.from.row;
-                let fromCol = arrow.from.col;
-                let toRow = arrow.to.row;
-                let toCol = arrow.to.col;
-                
-                // Если доска перевёрнута, зеркалируем координаты
-                if (isFlipped) {
-                    fromRow = 7 - fromRow;
-                    fromCol = 7 - fromCol;
-                    toRow = 7 - toRow;
-                    toCol = 7 - toCol;
-                }
-                
-                const fromX = (fromCol + 0.5) * cellSize;
-                const fromY = (fromRow + 0.5) * cellSize;
-                const toX = (toCol + 0.5) * cellSize;
-                const toY = (toRow + 0.5) * cellSize;
-                
-                this.drawArrow(svg, fromX, fromY, toX, toY, arrow.color);
-            });
-            
-            boardEl.style.position = 'relative';
-            boardEl.appendChild(svg);
-        } catch (error) {
-            console.error('❌ Ошибка при рендере стрелок:', error);
-        }
-    }
-    
-    // === SOCKET СОБЫТИЯ ===
     setupSocketEvents() {
         if (!this.socket) {
             console.warn('⚠️ Сокет не найден для настройки событий');
             return;
         }
         
-        // Удаляем старые обработчики
         this.socket.off('arrow_drawn');
         this.socket.off('arrow_removed');
         this.socket.off('arrows_cleared');
         
-        // Обработчик добавления стрелки
         this.socket.on('arrow_drawn', (data) => {
             console.log('📥 arrow_drawn получен:', data);
             
@@ -472,13 +548,11 @@ class ArrowSystem {
                 return;
             }
             
-            // Проверяем, что это наша комната
             if (data.room_id !== this.currentRoom && data.room_id !== window.currentRoom) {
                 console.log('ℹ️ Стрелка из другой комнаты:', data.room_id);
                 return;
             }
             
-            // Проверяем, существует ли уже такая стрелка
             const exists = window.arrowSystem.arrows.some(function(a) {
                 return a.id === data.arrow.id;
             });
@@ -488,11 +562,9 @@ class ArrowSystem {
                 return;
             }
             
-            // Добавляем стрелку
             window.arrowSystem.arrows.push(data.arrow);
             window.arrowSystem.render();
             
-            // Показываем уведомление, если стрелка от другого игрока
             if (data.arrow.player_id && data.arrow.player_id !== window.arrowSystem.socket.id) {
                 if (typeof showToast === 'function') {
                     showToast('📐 Соперник нарисовал стрелку', 'info');
@@ -500,7 +572,6 @@ class ArrowSystem {
             }
         });
         
-        // Обработчик удаления стрелки
         this.socket.on('arrow_removed', (data) => {
             if (data.room_id !== this.currentRoom && data.room_id !== window.currentRoom) {
                 return;
@@ -511,21 +582,17 @@ class ArrowSystem {
             this.render();
         });
         
-        // Обработчик очистки всех стрелок
         this.socket.on('arrows_cleared', (data) => {
             console.log('📥 Получено событие arrows_cleared:', data);
             
-            // Проверяем, что это наша комната
             if (data.room_id !== this.currentRoom && data.room_id !== window.currentRoom) {
                 console.log('ℹ️ Очистка стрелок в другой комнате:', data.room_id);
                 return;
             }
             
-            // Очищаем локальные стрелки
             this.arrows = [];
             this.render();
             
-            // Показываем уведомление
             if (typeof showToast === 'function') {
                 showToast('🧹 Все стрелки удалены', 'info');
             }
@@ -536,7 +603,6 @@ class ArrowSystem {
         console.log('✅ События стрелок настроены');
     }
     
-    // === ОБЩЕДОСТУПНЫЕ МЕТОДЫ ===
     setArrows(arrows) {
         this.arrows = arrows || [];
         this.render();
@@ -560,11 +626,9 @@ class ArrowSystem {
         const btn = document.getElementById('colorBtn');
         if (!btn) return;
         
-        // Получаем высоту кнопки
         const btnHeight = btn.offsetHeight || 30;
         const dotSize = Math.max(10, Math.round(btnHeight / 3));
         
-        // Создаём индикатор цвета (точка)
         const indicator = document.createElement('span');
         indicator.className = 'color-indicator';
         indicator.style.cssText = `
@@ -581,7 +645,6 @@ class ArrowSystem {
             box-shadow: 0 0 8px ${this.currentColor}44;
         `;
         
-        // Очищаем кнопку и добавляем текст + индикатор
         btn.innerHTML = '';
         btn.appendChild(document.createTextNode('🎨 Цвет '));
         btn.appendChild(indicator);
@@ -611,7 +674,6 @@ function initArrowSystem(socketManager) {
         arrowSystem = new ArrowSystem(socketManager);
         window.arrowSystem = arrowSystem;
         
-        // Глобальные функции для HTML
         window.toggleArrowMode = function() {
             if (arrowSystem) {
                 return arrowSystem.toggleMode();
@@ -633,12 +695,11 @@ function initArrowSystem(socketManager) {
             console.warn('⚠️ ArrowSystem не инициализирован');
         };
         
-        console.log('✅ ArrowSystem создан (режим всегда включён, зелёные стрелки)');
+        console.log('✅ ArrowSystem создан с плавным рендерингом');
     }
     return arrowSystem;
 }
 
-// Автоинициализация
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function() {
         if (window.socketManager) {
@@ -655,4 +716,4 @@ if (document.readyState === 'loading') {
     }
 }
 
-console.log('📐 Модуль arrows.js загружен (зелёные стрелки, режим всегда включён)');
+console.log('📐 Модуль arrows.js загружен (плавный рендеринг)');

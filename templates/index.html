@@ -21,6 +21,29 @@
     <!-- Стили для подсветки ходов -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/move-highlight.css') }}?v=15">
 
+
+    <!-- ============================================ -->
+    <!-- ОТКЛЮЧАЕМ АНИМАЦИЮ СТРЕЛОК (УБИРАЕМ МЕРЦАНИЕ) -->
+    <!-- ============================================ -->
+    <style>
+        /* Отключаем анимацию появления стрелок */
+        .board-arrows {
+            animation: none !important;
+            opacity: 1 !important;
+        }
+        
+        /* Отключаем анимацию для временной стрелки */
+        #tempArrow {
+            animation: none !important;
+        }
+        
+        /* Отключаем анимацию пульсации для временной стрелки */
+        #tempArrow line,
+        #tempArrow polygon {
+            animation: none !important;
+        }
+    </style>
+
 </head>
 <body>
     <div class="main-container">
@@ -218,7 +241,7 @@
     <script src="{{ url_for('static', filename='js/core/socket.js') }}?v=15" charset="utf-8"></script>
     
     <!-- Модуль стрелок -->
-    <script src="{{ url_for('static', filename='js/features/arrows.js') }}?v=17" charset="utf-8"></script>
+    <script src="{{ url_for('static', filename='js/features/arrows.js') }}?v=18" charset="utf-8"></script>
     
     <!-- Модуль отмены ходов -->
     <script src="{{ url_for('static', filename='js/features/undo.js') }}?v=20" charset="utf-8"></script>
