@@ -1,9 +1,5 @@
 // static/js/features/undo.js
 
-// ============================================
-// МОДУЛЬ УПРАВЛЕНИЯ ОТМЕНОЙ ХОДОВ (UNDO)
-// ============================================
-
 class UndoManager {
     constructor(socketManager) {
         this.socket = socketManager;
@@ -30,6 +26,10 @@ class UndoManager {
     
     syncFromGame(roomId, historyArray, canUndoState) {
         console.log('🔄 Синхронизация undoManager с игрой...');
+        console.log('   roomId:', roomId);
+        console.log('   historyArray length:', historyArray?.length || 0);
+        console.log('   canUndoState:', canUndoState);
+        
         this.currentRoom = roomId;
         this.history = historyArray.map(function(move) {
             return {
@@ -46,6 +46,14 @@ class UndoManager {
             window.moveHistory = this.history.map(function(h) { return h.move; });
             window.canUndo = this.canUndo;
             console.log('✅ Глобальная история синхронизирована, длина:', window.moveHistory.length);
+            console.log('✅ canUndo:', this.canUndo);
+        }
+        
+        // ПРИНУДИТЕЛЬНО ОБНОВЛЯЕМ UI
+        if (typeof window.renderBoard === 'function') {
+            setTimeout(function() {
+                window.renderBoard();
+            }, 50);
         }
         
         console.log('✅ UndoManager синхронизирован, ходов:', this.history.length);
@@ -53,6 +61,12 @@ class UndoManager {
     
     undoMove() {
         console.log('↩️ undoMove вызван');
+        console.log('   currentRoom:', this.currentRoom);
+        console.log('   history.length:', this.history.length);
+        console.log('   canUndo:', this.canUndo);
+        console.log('   isProcessing:', this.isProcessing);
+        console.log('   socket:', this.socket);
+        console.log('   socket.connected:', this.socket?.connected);
         
         if (this.isProcessing) {
             console.warn('⚠️ Уже выполняется операция отмены');
@@ -80,62 +94,58 @@ class UndoManager {
         
         this.isProcessing = true;
         console.log('📤 Отправка undo_move в комнату ' + this.currentRoom);
-        this.socket.emit('undo_move', {
-            room_id: this.currentRoom
-        });
         
+        // Проверяем, что сокет существует
+        if (!this.socket) {
+            console.error('❌ Сокет не существует!');
+            this.isProcessing = false;
+            if (typeof showToast === 'function') {
+                showToast('❌ Ошибка соединения', 'error');
+            }
+            return null;
+        }
+        
+        // Отправляем событие
+        const emitData = { room_id: this.currentRoom };
+        console.log('📤 Данные для отправки:', emitData);
+        
+        try {
+            this.socket.emit('undo_move', emitData);
+            console.log('✅ undo_move отправлен');
+        } catch (error) {
+            console.error('❌ Ошибка отправки undo_move:', error);
+            this.isProcessing = false;
+            if (typeof showToast === 'function') {
+                showToast('❌ Ошибка отправки запроса', 'error');
+            }
+            return null;
+        }
+        
+        // Таймаут на случай, если сервер не ответит
         var self = this;
         setTimeout(function() {
             if (self.isProcessing) {
                 console.warn('⚠️ Таймаут операции отмены');
                 self.isProcessing = false;
                 self.updateUI();
+                
+                if (typeof showToast === 'function') {
+                    showToast('⚠️ Таймаут отмены хода', 'error');
+                }
             }
         }, 5000);
         
-        // Оптимистичное обновление глобальной истории
-        if (typeof window !== 'undefined' && window.moveHistory && window.moveHistory.length > 0) {
-            window.moveHistory.pop();
-            window.canUndo = this.canUndo;
-        }
-        
         return this.history[this.history.length - 1];
-    }
-    
-    clearHistory() {
-        this.history = [];
-        this.canUndo = false;
-        this.isProcessing = false;
-        this.updateUI();
-        this.notifyListeners('history_cleared');
-        console.log('↩️ История ходов очищена');
-        
-        if (typeof window !== 'undefined') {
-            window.moveHistory = [];
-            window.canUndo = false;
-        }
-    }
-    
-    getHistory() {
-        return this.history.slice();
-    }
-    
-    getHistoryCount() {
-        return this.history.length;
-    }
-    
-    setRoom(roomId) {
-        this.currentRoom = roomId;
-        console.log('↩️ Комната установлена: ' + roomId);
-        this.updateUI();
     }
     
     setupSocketEvents() {
         var self = this;
         
+        // Обработчик успешной отмены
         this.socket.on('undo_success', function(data) {
-            console.log('📥 Получен undo_success');
+            console.log('📥 Получен undo_success:', data);
             self.isProcessing = false;
+            
             if (self.history.length > 0) {
                 self.history.pop();
                 self.canUndo = self.history.length > 0;
@@ -155,14 +165,24 @@ class UndoManager {
             console.log('✅ Отмена завершена');
         });
         
+        // Обработчик ошибки отмены
         this.socket.on('undo_error', function(data) {
-            console.log('📥 Получен undo_error');
+            console.log('📥 Получен undo_error:', data);
             self.isProcessing = false;
             console.error('❌ Ошибка отмены:', data.message);
             if (typeof showToast === 'function') {
                 showToast('❌ ' + data.message, 'error');
             }
             self.updateUI();
+        });
+
+        // Добавляем обработчик для любых ошибок
+        this.socket.on('error', function(data) {
+            console.log('📥 Получена ошибка:', data);
+            if (self.isProcessing) {
+                self.isProcessing = false;
+                self.updateUI();
+            }
         });
         
         // ============================================
@@ -173,7 +193,9 @@ class UndoManager {
                 has_move: !!data.move,
                 can_undo: data.can_undo,
                 move_history_len: data.move_history?.length || 0,
-                undo: !!data.undo
+                undo: !!data.undo,
+                reset: !!data.reset,
+                clear: !!data.clear
             });
             
             if (self.isProcessing) {
@@ -233,7 +255,23 @@ class UndoManager {
         });
     }
     
+    clearHistory() {
+        this.history = [];
+        this.canUndo = false;
+        this.isProcessing = false;
+        this.updateUI();
+        this.notifyListeners('history_cleared');
+        console.log('↩️ История ходов очищена');
+        
+        if (typeof window !== 'undefined') {
+            window.moveHistory = [];
+            window.canUndo = false;
+        }
+    }
+    
     updateUI() {
+        console.log('🔄 updateUI: history.length=', this.history.length, 'canUndo=', this.canUndo);
+        
         // Обновляем кнопку отмены
         var btn = document.getElementById('undoBtn');
         if (btn) {
@@ -268,6 +306,20 @@ class UndoManager {
         }
     }
     
+    getHistory() {
+        return this.history.slice();
+    }
+    
+    getHistoryCount() {
+        return this.history.length;
+    }
+    
+    setRoom(roomId) {
+        this.currentRoom = roomId;
+        console.log('↩️ Комната установлена: ' + roomId);
+        this.updateUI();
+    }
+    
     on(event, callback) {
         if (!this.listeners[event]) {
             this.listeners[event] = [];
@@ -297,18 +349,39 @@ class UndoManager {
 // ============================================
 
 var undoManager = null;
+var _undoManagerInitRunning = false;
 
 function initUndoManager(socketManager) {
-    if (!undoManager) {
+    if (_undoManagerInitRunning) {
+        console.warn('⚠️ UndoManager уже инициализируется, пропускаем');
+        return null;
+    }
+    
+    if (undoManager) {
+        console.log('✅ UndoManager уже существует');
+        return undoManager;
+    }
+    
+    if (!socketManager) {
+        console.warn('⚠️ Сокет не передан для UndoManager');
+        return null;
+    }
+    
+    _undoManagerInitRunning = true;
+    
+    try {
         undoManager = new UndoManager(socketManager);
         window.undoManager = undoManager;
         console.log('✅ UndoManager создан');
+        return undoManager;
+    } catch (error) {
+        console.error('❌ Ошибка создания UndoManager:', error);
+        return null;
+    } finally {
+        _undoManagerInitRunning = false;
     }
-    return undoManager;
 }
 
-window.getUndoManager = function() {
-    return undoManager;
-};
+window.initUndoManager = initUndoManager;
 
 console.log('↩️ Модуль undo.js загружен');

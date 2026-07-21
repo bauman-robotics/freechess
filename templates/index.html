@@ -106,10 +106,23 @@
                     </button>
                 </div>
 
-                <!-- Кнопка включения/выключения правил -->
-                <div class="chess-controls" style="margin-top: 10px;">
-                    <button onclick="window.toggleRules()" class="secondary" id="rulesToggle">
-                        ♟️ Правила
+                <!-- Кнопки режимов игры -->
+                <div class="chess-controls" style="margin-top: 10px; flex-wrap: wrap; justify-content: center; gap: 6px;">
+                    <button onclick="window.setGameMode('classic')" class="mode-btn active" data-mode="classic" title="Общие правила с очередью ходов">
+                        ♟️ Общие правила
+                        <span class="mode-indicator"></span>
+                    </button>
+                    <button onclick="window.setGameMode('marseille')" class="mode-btn" data-mode="marseille" title="Марсельские шахматы - по 2 хода за turn">
+                        ♟️ 2 хода
+                        <span class="mode-indicator"></span>
+                    </button>
+                    <button onclick="window.setGameMode('no_turn')" class="mode-btn" data-mode="no_turn" title="Без очереди, но с правилами">
+                        ♟️ Без очереди
+                        <span class="mode-indicator"></span>
+                    </button>
+                    <button onclick="window.setGameMode('no_rules')" class="mode-btn" data-mode="no_rules" title="Без правил - полная песочница">
+                        ♟️ Без правил
+                        <span class="mode-indicator"></span>
                     </button>
                 </div>
 
@@ -139,7 +152,7 @@
                 <!-- Режим игры -->
                 <div class="info-item">
                     <span class="label">🎮 Режим:</span>
-                    <span class="value">Песочница</span>
+                    <span class="value" id="modeDisplay">Общие правила</span>
                 </div>
 
                 <!-- Игроки -->
@@ -198,6 +211,11 @@
                     ⚡ Кликните по ID комнаты или ссылке чтобы скопировать<br>
                     <span style="font-size: 10px; color: #444;">v2.0 со стрелками и отменой ходов</span>
                 </div>
+
+                <!-- Подсказка текущего режима -->
+                <div class="mode-hint" id="modeHint">♟️ Общие правила: игра с очередью ходов, проверка всех шахматных правил
+                </div>
+
             </div>
             <!-- ===== КОНЕЦ ПРАВОЙ ПАНЕЛИ ===== -->
 
@@ -222,38 +240,47 @@
     <!-- Модуль правил - ЗАГРУЖАЕТСЯ ПОСЛЕ chess.js -->
     <script src="{{ url_for('static', filename='js/features/chessRules.js') }}?v=35"></script>
 
+    <!-- Конфигурация -->
+    <script src="{{ url_for('static', filename='js/config.js') }}?v=1" charset="utf-8"></script>
+    
+    <!-- Модуль режимов игры  -->
+    <script src="{{ url_for('static', filename='js/features/gameModes.js') }}?v=18" charset="utf-8"></script>
+
     <!-- Шахматные фигуры (SVG) -->
     <script src="{{ url_for('static', filename='js/pieces.js') }}?v=15" charset="utf-8"></script>
-        
+
     <!-- Модуль превращения пешки в фигуру -->
     <script src="{{ url_for('static', filename='js/features/promotion.js') }}?v=1" charset="utf-8"></script>
 
     <!-- ============================================ -->
-    <!-- ОСНОВНОЙ КОД (script.js) -->
-    <!-- ============================================ -->
-    <script src="{{ url_for('static', filename='js/script.js') }}?v=65" charset="utf-8"></script>
-    
-    <!-- ============================================ -->
     <!-- МОДУЛИ -->
     <!-- ============================================ -->
-    
+
     <!-- Модуль WebSocket -->
     <script src="{{ url_for('static', filename='js/core/socket.js') }}?v=15" charset="utf-8"></script>
-    
+
     <!-- Модуль стрелок -->
     <script src="{{ url_for('static', filename='js/features/arrows.js') }}?v=18" charset="utf-8"></script>
-    
+
     <!-- Модуль отмены ходов -->
-    <script src="{{ url_for('static', filename='js/features/undo.js') }}?v=21" charset="utf-8"></script>
-    
-    <!-- Модуль подсветки ходов (ПОСЛЕ script.js) -->
+    <script src="{{ url_for('static', filename='js/features/undo.js') }}?v=26" charset="utf-8"></script>
+
+    <!-- Модуль подсветки ходов (ПЕРЕД script.js) -->
     <script src="{{ url_for('static', filename='js/features/moveHighlight.js') }}?v=15" charset="utf-8"></script>
-    
+
+    <!-- ============================================ -->
+    <!-- ОСНОВНОЙ КОД (script.js) -->
+    <!-- ============================================ -->
+    <script src="{{ url_for('static', filename='js/script.js') }}?v=89" charset="utf-8"></script>
+
     <!-- ============================================ -->
     <!-- ИНТЕГРАЦИЯ МОДУЛЕЙ -->
     <!-- ============================================ -->
-    <script src="{{ url_for('static', filename='js/integration/undo-integration.js') }}?v=15" charset="utf-8"></script>
-    
+
+    <script src="{{ url_for('static', filename='js/integration/undo-integration.js') }}?v=19" charset="utf-8"></script>
+
+    <script src="{{ url_for('static', filename='js/integration/modes-integration.js') }}?v=18" charset="utf-8"></script>
+
     <!-- Синхронизация подсветки -->
     <script src="{{ url_for('static', filename='js/script-sync.js') }}?v=1" charset="utf-8"></script>
 
@@ -357,38 +384,50 @@
             // 3. ИНИЦИАЛИЗАЦИЯ UNDOMANAGER
             // ============================================
             function initUndoManager(socket) {
+                // Проверяем, что UndoManager уже существует
                 if (typeof window.undoManager !== 'undefined' && window.undoManager !== null) {
                     console.log('✅ UndoManager уже существует');
                     return window.undoManager;
                 }
                 
+                // Проверяем, что сокет передан
                 if (!socket) {
                     console.warn('⚠️ Сокет не передан для UndoManager');
                     return null;
                 }
                 
-                if (typeof initUndoManager === 'function') {
-                    window.undoManager = initUndoManager(socket);
-                    console.log('✅ UndoManager создан (initUndoManager)');
-                    return window.undoManager;
+                // Защита от рекурсии - используем глобальный флаг
+                if (window._undoInitRunning) {
+                    console.warn('⚠️ UndoManager уже инициализируется, пропускаем');
+                    return null;
                 }
+                window._undoInitRunning = true;
                 
-                if (typeof window.initUndoManager === 'function') {
-                    window.undoManager = window.initUndoManager(socket);
-                    console.log('✅ UndoManager создан (window.initUndoManager)');
-                    return window.undoManager;
+                try {
+                    // Пытаемся использовать глобальную функцию initUndoManager
+                    if (typeof window.initUndoManager === 'function') {
+                        window.undoManager = window.initUndoManager(socket);
+                        console.log('✅ UndoManager создан через window.initUndoManager');
+                        return window.undoManager;
+                    }
+                    
+                    // Если функция не определена, пробуем создать вручную
+                    if (typeof UndoManager !== 'undefined') {
+                        window.undoManager = new UndoManager(socket);
+                        console.log('✅ UndoManager создан вручную (new UndoManager)');
+                        return window.undoManager;
+                    }
+                    
+                    console.warn('⚠️ Не удалось создать UndoManager - UndoManager не определён');
+                    return null;
+                } catch (error) {
+                    console.error('❌ Ошибка при создании UndoManager:', error);
+                    return null;
+                } finally {
+                    window._undoInitRunning = false;
                 }
-                
-                if (typeof UndoManager !== 'undefined') {
-                    window.undoManager = new UndoManager(socket);
-                    console.log('✅ UndoManager создан вручную');
-                    return window.undoManager;
-                }
-                
-                console.warn('⚠️ Не удалось создать UndoManager');
-                return null;
             }
-            
+
             // ============================================
             // 4. ИНИЦИАЛИЗАЦИЯ MOVEHIGHLIGHT
             // ============================================
@@ -457,9 +496,10 @@
             }
             
             // ============================================
-            // 6. СИНХРОНИЗАЦИЯ UNDO С ИГРОЙ
+            // 6. СИНХРОНИЗАЦИЯ UNDO С ИГРОЙ (безопасная)
             // ============================================
             function syncUndoWithGame() {
+                // Проверяем, что undoManager существует
                 if (typeof window.undoManager === 'undefined' || window.undoManager === null) {
                     console.warn('⚠️ UndoManager не найден для синхронизации');
                     return;
@@ -470,8 +510,12 @@
                 const canUndo = window.canUndo || history.length > 0;
                 
                 if (roomId && roomId !== '—') {
-                    window.undoManager.syncFromGame(roomId, history, canUndo);
-                    console.log('✅ UndoManager синхронизирован с игрой');
+                    try {
+                        window.undoManager.syncFromGame(roomId, history, canUndo);
+                        console.log('✅ UndoManager синхронизирован с игрой');
+                    } catch (error) {
+                        console.warn('⚠️ Ошибка синхронизации UndoManager:', error);
+                    }
                 }
             }
             
@@ -748,6 +792,17 @@
                 // Шаг 12: Ещё раз настраиваем клики (на случай, если DOM изменился)
                 setTimeout(setupCopyClickHandlers, 300);
                 
+
+                // Принудительная синхронизация режима при загрузке
+                setTimeout(function() {
+                    if (window.currentRoom && window.gameModes) {
+                        // Запрашиваем текущий режим с сервера
+                        if (window.socket) {
+                            window.socket.emit('get_game_mode', { room_id: window.currentRoom });
+                        }
+                    }
+                }, 500);
+
                 console.log('✅ Все модули инициализированы!');
                 console.log('📋 Доступные глобальные функции:');
                 console.log('  - createGame()');

@@ -26,6 +26,55 @@ const PIECE_NAMES = {
     'k': 'Король', 'q': 'Ферзь', 'r': 'Ладья', 'b': 'Слон', 'n': 'Конь', 'p': 'Пешка'
 };
 
+
+// ============================================
+// ИНТЕГРАЦИЯ С РЕЖИМАМИ ИГРЫ
+// ============================================
+
+// Функция для проверки, может ли игрок ходить
+function canPlayerMove(color) {
+    if (!window.gameModes) {
+        // Если режимы не загружены, используем старую логику
+        return true;
+    }
+    
+    return window.gameModes.isMyTurn(color, board);
+}
+
+// Функция для валидации хода с учётом режима
+function validateMoveWithMode(fromRow, fromCol, toRow, toCol, piece, color) {
+    if (!window.gameModes) {
+        // Если режимы не загружены, используем старую логику
+        return { valid: true };
+    }
+    
+    return window.gameModes.isValidMove({
+        fromRow, fromCol, toRow, toCol, piece
+    }, board, color);
+}
+
+// Функция для получения нотации хода
+function getMoveNotationWithMode(fromRow, fromCol, toRow, toCol, piece, promotion) {
+    if (!window.gameModes) {
+        // Fallback: простая нотация
+        const toSquare = `${String.fromCharCode(97 + toCol)}${8 - toRow}`;
+        return toSquare;
+    }
+    
+    return window.gameModes.getMoveNotation({
+        fromRow, fromCol, toRow, toCol, piece
+    }, board, promotion);
+}
+
+// Функция для обработки хода в режиме
+function processMoveWithMode(fromRow, fromCol, toRow, toCol, piece, color) {
+    if (window.gameModes) {
+        window.gameModes.processMove({
+            fromRow, fromCol, toRow, toCol, piece
+        }, color, board);
+    }
+}
+
 // === ИНИЦИАЛИЗАЦИЯ ДОСКИ ===
 function initialBoard() {
     const board = [];
@@ -63,118 +112,145 @@ function updateUndoButton() {
     }
     
     console.log(`↩️ Кнопка UNDO: ${canUndo ? 'АКТИВНА' : 'НЕАКТИВНА'} (${moveHistory.length} ходов)`);
+    console.log(`   moveHistory:`, moveHistory);
 }
 
 // === РЕНДЕРИНГ ДОСКИ ===
 function renderBoard() {
     console.log('🔄 Рендеринг доски...');
+    console.log('📊 Текущая доска:', board);
+    
     const boardEl = document.getElementById('chessBoard');
     if (!boardEl) {
         console.error('❌ Элемент chessBoard не найден!');
         return;
     }
+    
+    // Проверяем, что доска существует
+    if (!board || !Array.isArray(board) || board.length === 0) {
+        console.warn('⚠️ Доска пуста или не определена, используем начальную');
+        board = initialBoard();
+        console.log('📊 Создана начальная доска');
+    }
+    
+    // Проверяем, что доска имеет правильный размер
+    if (board.length !== 8) {
+        console.warn('⚠️ Доска имеет неправильный размер, пересоздаём');
+        board = initialBoard();
+    }
+    
+    // Очищаем доску ПЕРЕД рендерингом
     boardEl.innerHTML = '';
+    boardEl.style.opacity = '0';
+    
+    // Используем requestAnimationFrame для плавного обновления
+    requestAnimationFrame(() => {
+        const rows = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
+        const cols = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
 
-    const rows = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
-    const cols = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
+        // === ПРОВЕРЯЕМ ШАХ ДЛЯ ОБОИХ ИГРОКОВ ===
+        let kingsInCheck = [];
 
-    // === ПРОВЕРЯЕМ ШАХ ДЛЯ ОБОИХ ИГРОКОВ ===
-    let kingsInCheck = [];
-
-    if (window.chessRules && window.chessRules.isEnabled) {
-        // Проверяем шах для белых
-        window.chessRules.setCurrentColor('white');
-        if (window.chessRules.isInCheck(board)) {
-            const king = 'K';
-            for (let r = 0; r < 8; r++) {
-                for (let c = 0; c < 8; c++) {
-                    if (board[r]?.[c] === king) {
-                        kingsInCheck.push({ row: r, col: c, color: 'white' });
-                        break;
+        if (window.chessRules && window.chessRules.isEnabled) {
+            // Проверяем шах для белых
+            window.chessRules.setCurrentColor('white');
+            if (window.chessRules.isInCheck(board)) {
+                const king = 'K';
+                for (let r = 0; r < 8; r++) {
+                    for (let c = 0; c < 8; c++) {
+                        if (board[r]?.[c] === king) {
+                            kingsInCheck.push({ row: r, col: c, color: 'white' });
+                            break;
+                        }
                     }
                 }
             }
-        }
-        
-        // Проверяем шах для чёрных
-        window.chessRules.setCurrentColor('black');
-        if (window.chessRules.isInCheck(board)) {
-            const king = 'k';
-            for (let r = 0; r < 8; r++) {
-                for (let c = 0; c < 8; c++) {
-                    if (board[r]?.[c] === king) {
-                        kingsInCheck.push({ row: r, col: c, color: 'black' });
-                        break;
+            
+            // Проверяем шах для чёрных
+            window.chessRules.setCurrentColor('black');
+            if (window.chessRules.isInCheck(board)) {
+                const king = 'k';
+                for (let r = 0; r < 8; r++) {
+                    for (let c = 0; c < 8; c++) {
+                        if (board[r]?.[c] === king) {
+                            kingsInCheck.push({ row: r, col: c, color: 'black' });
+                            break;
+                        }
                     }
                 }
             }
+            
+            // Возвращаем цвет для текущего игрока (для других проверок)
+            window.chessRules.setCurrentColor(myColor);
+        }
+
+        // Создаём клетки
+        for (let ri = 0; ri < 8; ri++) {
+            const r = rows[ri];
+            for (let ci = 0; ci < 8; ci++) {
+                const c = cols[ci];
+                const cell = document.createElement('div');
+                const isWhite = (r + c) % 2 === 0;
+                cell.className = `chess-cell ${isWhite ? 'white' : 'black'}`;
+
+                // === ПОДСВЕТКА КОРОЛЯ ПРИ ШАХЕ ===
+                const isKingInCheck = kingsInCheck.some(k => k.row === r && k.col === c);
+                if (isKingInCheck) {
+                    cell.classList.add('king-in-check');
+                }
+
+                if (selectedCell && selectedCell.row === r && selectedCell.col === c) {
+                    cell.classList.add('selected');
+                }
+
+                if (lastMove.from && lastMove.from.row === r && lastMove.from.col === c) {
+                    cell.classList.add('last-move-from');
+                }
+                if (lastMove.to && lastMove.to.row === r && lastMove.to.col === c) {
+                    cell.classList.add('last-move-to');
+                }
+
+                const piece = board[r]?.[c];
+                if (piece && typeof PIECES_SVG !== 'undefined' && PIECES_SVG[piece]) {
+                    const svgContent = PIECES_SVG[piece];
+                    if (svgContent) {
+                        const wrapper = document.createElement('div');
+                        wrapper.style.width = '100%';
+                        wrapper.style.height = '100%';
+                        wrapper.style.display = 'flex';
+                        wrapper.style.alignItems = 'center';
+                        wrapper.style.justifyContent = 'center';
+                        wrapper.style.padding = '10%';
+                        wrapper.innerHTML = svgContent;
+                        cell.appendChild(wrapper);
+                    }
+                }
+
+                cell.dataset.row = r;
+                cell.dataset.col = c;
+                cell.addEventListener('click', () => onCellClick(r, c));
+                boardEl.appendChild(cell);
+            }
         }
         
-        // Возвращаем цвет для текущего игрока (для других проверок)
-        window.chessRules.setCurrentColor(myColor);
-    }
-
-    for (let ri = 0; ri < 8; ri++) {
-        const r = rows[ri];
-        for (let ci = 0; ci < 8; ci++) {
-            const c = cols[ci];
-            const cell = document.createElement('div');
-            const isWhite = (r + c) % 2 === 0;
-            cell.className = `chess-cell ${isWhite ? 'white' : 'black'}`;
-
-            // === ПОДСВЕТКА КОРОЛЯ ПРИ ШАХЕ (ДЛЯ ОБОИХ ИГРОКОВ) ===
-            const isKingInCheck = kingsInCheck.some(k => k.row === r && k.col === c);
-            if (isKingInCheck) {
-                cell.classList.add('king-in-check');
-            }
-
-            if (selectedCell && selectedCell.row === r && selectedCell.col === c) {
-                cell.classList.add('selected');
-            }
-
-            if (lastMove.from && lastMove.from.row === r && lastMove.from.col === c) {
-                cell.classList.add('last-move-from');
-            }
-            if (lastMove.to && lastMove.to.row === r && lastMove.to.col === c) {
-                cell.classList.add('last-move-to');
-            }
-
-            const piece = board[r]?.[c];
-            if (piece && typeof PIECES_SVG !== 'undefined' && PIECES_SVG[piece]) {
-                const svgContent = PIECES_SVG[piece];
-                if (svgContent) {
-                    const wrapper = document.createElement('div');
-                    wrapper.style.width = '100%';
-                    wrapper.style.height = '100%';
-                    wrapper.style.display = 'flex';
-                    wrapper.style.alignItems = 'center';
-                    wrapper.style.justifyContent = 'center';
-                    wrapper.style.padding = '10%';
-                    wrapper.innerHTML = svgContent;
-                    cell.appendChild(wrapper);
-                }
-            }
-
-            cell.dataset.row = r;
-            cell.dataset.col = c;
-            cell.addEventListener('click', () => onCellClick(r, c));
-            boardEl.appendChild(cell);
+        // Показываем доску после рендеринга
+        boardEl.style.opacity = '1';
+        boardEl.style.transition = 'opacity 0.15s ease';
+        
+        updateStatus();
+        updateSidebar();
+        updateUndoButton();
+        updateRoomLink();
+        
+        if (window.arrowSystem) {
+            window.arrowSystem.setFlipped(flipped);
+            setTimeout(() => {
+                window.arrowSystem.render();
+            }, 10);
         }
-    }
-    
-    updateStatus();
-    updateSidebar();
-    updateUndoButton();
-    updateRoomLink();
-    
-    if (window.arrowSystem) {
-        window.arrowSystem.setFlipped(flipped);
-        setTimeout(() => {
-            window.arrowSystem.render();
-        }, 10);
-    }
-    
-    console.log('✅ Доска отрендерена');
+        
+        console.log('✅ Доска отрендерена');
+    });
 }
 
 // ============================================
@@ -210,242 +286,529 @@ async function onCellClick(row, col) {
     const fromCol = selectedCell.col;
     const fromPiece = board[fromRow]?.[fromCol];
 
-    if (fromPiece) {
-        // ============================================
-        // ⚡ КРИТИЧЕСКАЯ ПРОВЕРКА: Нельзя съесть короля!
-        // ============================================
-        const targetPiece = board[row]?.[col];
-        const rulesEnabled = window.chessRules ? window.chessRules.isEnabled : true;
-        
-        if (rulesEnabled && targetPiece && (targetPiece === 'K' || targetPiece === 'k')) {
-            showToast('❌ Нельзя съесть короля! (правила включены)', 'error');
+    if (!fromPiece) {
+        selectedCell = null;
+        renderBoard();
+        return;
+    }
+
+    // ============================================
+    // ⚡ ПРОВЕРКА РЕЖИМА ИГРЫ (ОЧЕРЕДНОСТЬ)
+    // ============================================
+    const targetPiece = board[row]?.[col];
+    
+    // Получаем текущий режим
+    const currentMode = window.gameModes ? window.gameModes.getMode() : 'classic';
+    const isNoRules = currentMode === 'no_rules';
+    const isNoTurn = currentMode === 'no_turn';
+    const isMarseille = currentMode === 'marseille';
+    const isClassic = currentMode === 'classic';
+    
+    // Проверяем, включены ли правила
+    const rulesEnabled = window.chessRules ? window.chessRules.isEnabled : true;
+    const rulesCheckEnabled = rulesEnabled && !isNoRules;
+
+    // ============================================
+    // ⚡ ПРОВЕРКА ОЧЕРЕДНОСТИ ХОДА
+    // ============================================
+    if (window.gameModes && window.gameModes.hasTurnOrder()) {
+        const canMove = window.gameModes.isMyTurn(myColor, board);
+        if (!canMove) {
+            const turn = window.gameModes.getCurrentTurn(myColor);
+            const turnName = turn === 'white' ? 'белых' : 'чёрных';
+            showToast(`⏳ Сейчас ход ${turnName}`, 'info');
             selectedCell = null;
             renderBoard();
             return;
         }
+    }
 
-        const isCastlingMove = (fromPiece === 'K' || fromPiece === 'k') && Math.abs(col - fromCol) === 2;
+    // ============================================
+    // ⚡ ПРОВЕРКА ХОДА ЧЕРЕЗ РЕЖИМЫ
+    // ============================================
+    if (window.gameModes && rulesCheckEnabled) {
+        const validation = window.gameModes.isValidMove({
+            fromRow, fromCol, toRow: row, toCol: col, piece: fromPiece
+        }, board, myColor);
+        
+        if (!validation.valid) {
+            showToast(validation.reason || '❌ Недопустимый ход', 'error');
+            selectedCell = null;
+            renderBoard();
+            return;
+        }
+    }
 
-        // ============================================
-        // ⚡ ПРОВЕРЯЕМ ПРАВИЛА ДО ТОГО, КАК СПРАШИВАТЬ ПРЕВРАЩЕНИЕ!
-        // ============================================
-        if (rulesEnabled) {
-            if (isCastlingMove) {
-                // Полная проверка рокировки через chessRules
-                const isValid = window.chessRules.isValidCastling(fromRow, fromCol, row, col, board, myColor);
-                if (!isValid) {
-                    // isValidCastling уже показывает toast с причиной
-                    selectedCell = null;
-                    renderBoard();
-                    return;
-                }
-                
-                // Выполняем рокировку через chessRules
-                const newBoard = window.chessRules.makeCastling(fromRow, fromCol, row, col, board, myColor);
-                if (newBoard) {
-                    board = newBoard;
-                } else {
-                    // Fallback: выполняем вручную
-                    const isWhite = myColor === 'white';
-                    const boardRow = isWhite ? 7 : 0;
-                    const king = isWhite ? 'K' : 'k';
-                    const rook = isWhite ? 'R' : 'r';
-                    
-                    if (col > fromCol) {
-                        board[boardRow][6] = king;
-                        board[boardRow][4] = null;
-                        board[boardRow][5] = rook;
-                        board[boardRow][7] = null;
-                    } else {
-                        board[boardRow][2] = king;
-                        board[boardRow][4] = null;
-                        board[boardRow][3] = rook;
-                        board[boardRow][0] = null;
-                    }
-                }
-                
-                // Формируем строку хода
-                const moveStr = (col > fromCol) ? 'O-O' : 'O-O-O';
-                
-                // Сохраняем ход в историю
-                moveHistory.push(moveStr);
-                window.moveHistory = moveHistory;
-                document.getElementById('lastMove').textContent = moveStr;
-                setStatus(`Ход: ${moveStr}`, 'success');
-                
-                // Отправляем рокировку на сервер
-                if (window.socket) {
-                    window.socket.emit('move', {
-                        room_id: currentRoom,
-                        from: { row: fromRow, col: fromCol },
-                        to: { row: row, col: col },
-                        isCastling: true
-                    });
-                }
-                
-                // Синхронизируем undoManager
-                if (window.undoManager) {
-                    setTimeout(function() {
-                        window.undoManager.syncFromGame(
-                            currentRoom,
-                            moveHistory,
-                            true
-                        );
-                    }, 50);
-                }
-                
+    // ============================================
+    // ⚡ КРИТИЧЕСКАЯ ПРОВЕРКА: Нельзя съесть короля!
+    // ============================================
+    if (rulesCheckEnabled && targetPiece && (targetPiece === 'K' || targetPiece === 'k')) {
+        showToast('❌ Нельзя съесть короля! (правила включены)', 'error');
+        selectedCell = null;
+        renderBoard();
+        return;
+    }
+
+    const isCastlingMove = (fromPiece === 'K' || fromPiece === 'k') && Math.abs(col - fromCol) === 2;
+
+    // ============================================
+    // ⚡ СОХРАНЯЕМ ДОСКУ ДО ХОДА (ДЛЯ МАРСЕЛЬСКИХ ШАХМАТ)
+    // ============================================
+    const boardBeforeMove = board.map(row => [...row]);
+
+    // ============================================
+    // ⚡ ПРОВЕРЯЕМ ПРАВИЛА ДО ТОГО, КАК СПРАШИВАТЬ ПРЕВРАЩЕНИЕ!
+    // ============================================
+    if (rulesCheckEnabled) {
+        // =================================================================================================
+        // === РОКИРОВКА ===
+        if (isCastlingMove) {
+            // Проверка рокировки через chessRules
+            const isValid = window.chessRules.isValidCastling(fromRow, fromCol, row, col, board, myColor);
+            if (!isValid) {
                 selectedCell = null;
                 renderBoard();
                 return;
+            }
+            
+            // Выполняем рокировку через chessRules
+            const newBoard = window.chessRules.makeCastling(fromRow, fromCol, row, col, board, myColor);
+            if (newBoard) {
+                board = newBoard;
             } else {
-                // === ОБЫЧНЫЙ ХОД С ПРОВЕРКОЙ ПРАВИЛ ===
+                // Fallback: выполняем вручную
+                const isWhite = myColor === 'white';
+                const boardRow = isWhite ? 7 : 0;
+                const king = isWhite ? 'K' : 'k';
+                const rook = isWhite ? 'R' : 'r';
                 
-                // Проверяем ход через chessRules (ДО превращения)
-                const isValid = window.chessRules.isValidMove(fromRow, fromCol, row, col, board, myColor);
-                if (!isValid) {
-                    // isValid уже показывает toast
-                    selectedCell = null;
-                    renderBoard();
-                    return;
-                }
-                
-                // ============================================
-                // ⚡ ТОЛЬКО ПОСЛЕ ПРОВЕРКИ ПРАВИЛ СПРАШИВАЕМ ПРЕВРАЩЕНИЕ
-                // ============================================
-                let promotionPiece = null;
-                if (window.pawnPromotion && window.pawnPromotion.isPromotionMove(fromPiece, row)) {
-                    promotionPiece = await window.pawnPromotion.ask(myColor);
-                }
-                
-                // Выполняем ход через chessRules
-                const newBoard = window.chessRules.makeMove(fromRow, fromCol, row, col, board, myColor, promotionPiece);
-                if (newBoard) {
-                    board = newBoard;
+                if (col > fromCol) {
+                    board[boardRow][6] = king;
+                    board[boardRow][4] = null;
+                    board[boardRow][5] = rook;
+                    board[boardRow][7] = null;
                 } else {
-                    // Если не удалось выполнить ход через chessRules
-                    board[row][col] = fromPiece;
-                    board[fromRow][fromCol] = null;
-                    
-                    if (promotionPiece) {
-                        board[row][col] = myColor === 'white'
-                            ? promotionPiece.toUpperCase()
-                            : promotionPiece.toLowerCase();
-                    }
-                }
-
-                if (promotionPiece && board[row][col] === fromPiece) {
-                    board[row][col] = myColor === 'white'
-                        ? promotionPiece.toUpperCase()
-                        : promotionPiece.toLowerCase();
-                }
-                
-                // Формируем строку хода для истории
-                const fromName = PIECE_NAMES[fromPiece] || fromPiece;
-                const fromSquare = `${String.fromCharCode(65 + fromCol)}${8 - fromRow}`;
-                const toSquare = `${String.fromCharCode(65 + col)}${8 - row}`;
-                let moveStr = `${fromName} ${fromSquare}→${toSquare}`;
-                if (promotionPiece) {
-                    moveStr += ` (=${PIECE_NAMES[board[row][col]] || board[row][col]})`;
-                }
-                
-                // Проверяем шах/мат после хода
-                if (window.chessRules && window.chessRules.isEnabled) {
-                    const boardCopy = board.map(row => [...row]);
-                    if (window.chessRules.isCheckmate(boardCopy)) {
-                        moveStr += ' #';
-                    } else if (window.chessRules.isInCheck(boardCopy)) {
-                        moveStr += ' +';
-                    }
-                }
-                
-                // Сохраняем ход в историю
-                if (moveStr) {
-                    moveHistory.push(moveStr);
-                    window.moveHistory = moveHistory;
-                    document.getElementById('lastMove').textContent = moveStr;
-                    setStatus(`Ход: ${moveStr}`, 'success');
-                }
-
-                // Отправляем ход на сервер
-                if (window.socket) {
-                    window.socket.emit('move', {
-                        room_id: currentRoom,
-                        from: { row: fromRow, col: fromCol },
-                        to: { row: row, col: col },
-                        isCastling: false,
-                        promotion: promotionPiece
-                    });
-                }
-
-                selectedCell = null;
-                renderBoard();
-                return;
-            }
-        } else {
-            // === РЕЖИМ БЕЗ ПРАВИЛ ===
-            // Просто перемещаем фигуру, разрешаем есть короля
-            
-            // Проверяем, не пытается ли игрок съесть свою фигуру
-            if (targetPiece) {
-                const fromColor = fromPiece === fromPiece.toUpperCase() ? 'white' : 'black';
-                const toColor = targetPiece === targetPiece.toUpperCase() ? 'white' : 'black';
-                if (fromColor === toColor) {
-                    showToast('❌ Нельзя съесть свою фигуру!', 'error');
-                    selectedCell = null;
-                    renderBoard();
-                    return;
+                    board[boardRow][2] = king;
+                    board[boardRow][4] = null;
+                    board[boardRow][3] = rook;
+                    board[boardRow][0] = null;
                 }
             }
             
-            // ============================================
-            // ⚡ В РЕЖИМЕ БЕЗ ПРАВИЛ СПРАШИВАЕМ ПРЕВРАЩЕНИЕ
-            // ============================================
-            let promotionPiece = null;
-            if (window.pawnPromotion && window.pawnPromotion.isPromotionMove(fromPiece, row)) {
-                promotionPiece = await window.pawnPromotion.ask(myColor);
-            }
-            
-            board[row][col] = fromPiece;
-            board[fromRow][fromCol] = null;
-
-            if (promotionPiece) {
-                board[row][col] = myColor === 'white'
-                    ? promotionPiece.toUpperCase()
-                    : promotionPiece.toLowerCase();
-            }
-
-            // Формируем строку хода для истории
-            const fromName = PIECE_NAMES[fromPiece] || fromPiece;
-            const fromSquare = `${String.fromCharCode(65 + fromCol)}${8 - fromRow}`;
-            const toSquare = `${String.fromCharCode(65 + col)}${8 - row}`;
-            let moveStr = `${fromName} ${fromSquare}→${toSquare}`;
-            if (promotionPiece) {
-                moveStr += ` (=${PIECE_NAMES[board[row][col]] || board[row][col]})`;
-            }
+            // Формируем строку хода
+            const moveStr = (col > fromCol) ? 'O-O' : 'O-O-O';
             
             // Сохраняем ход в историю
-            if (moveStr) {
-                moveHistory.push(moveStr);
-                window.moveHistory = moveHistory;
-                document.getElementById('lastMove').textContent = moveStr;
-                setStatus(`Ход: ${moveStr}`, 'success');
+            moveHistory.push(moveStr);
+            window.moveHistory = moveHistory;
+            document.getElementById('lastMove').textContent = moveStr;
+            setStatus(`Ход: ${moveStr}`, 'success');
+            
+            // ============================================
+            // ⚡ ОБРАБОТКА ХОДА В РЕЖИМЕ ИГРЫ (МАРСЕЛЬСКИЕ ШАХМАТЫ)
+            // ============================================
+            console.log('🔍 ПЕРЕД ВЫЗОВОМ processMove');
+            console.log('  window.gameModes:', window.gameModes);
+            console.log('  isMarseille:', window.gameModes?.isMarseille());
+            console.log('  myColor:', myColor);
+            console.log('  fromPiece:', fromPiece);
+            if (window.gameModes) {
+                console.log('🔥 Вызов processMove из onCellClick (рокировка)');
+                window.gameModes.processMove({
+                    fromRow, fromCol, toRow: row, toCol: col, 
+                    piece: fromPiece,
+                    isCastling: true
+                }, myColor, board, boardBeforeMove);
+            }
+            
+            // ============================================
+            // ⚡ ОТЛАДКА: ПРОВЕРКА СОСТОЯНИЯ ПОСЛЕ ХОДА
+            // ============================================
+            console.log('🔍 ОТЛАДКА ПОСЛЕ ХОДА:');
+            console.log('  myColor:', myColor);
+            console.log('  fromPiece:', fromPiece);
+            console.log('  fromRow:', fromRow);
+            console.log('  fromCol:', fromCol);
+            console.log('  state:', window.gameModes?.marseilleState);
+            console.log('  state.whiteFirstMoveDone:', window.gameModes?.marseilleState?.whiteFirstMoveDone);
+            console.log('  state.lastMovedPiece:', window.gameModes?.marseilleState?.lastMovedPiece);
+            console.log('  state.moveCount:', window.gameModes?.marseilleState?.moveCount);
+
+            // ============================================
+            // ⚡ ПРИНУДИТЕЛЬНОЕ СОХРАНЕНИЕ ДЛЯ БЕЛЫХ (УСИЛЕННОЕ)
+            // ============================================
+            if (window.gameModes && window.gameModes.isMarseille()) {
+                const state = window.gameModes.marseilleState;
+                
+                // УСИЛЕННОЕ УСЛОВИЕ - сохраняем всегда для белых, если lastMovedPiece === null
+                if (state.lastMovedPiece === null && fromPiece) {
+                    state.lastMovedPiece = fromPiece;
+                    state.lastMovedFrom = { row: fromRow, col: fromCol };
+                    console.log('🔥🔥🔥 ПРИНУДИТЕЛЬНОЕ СОХРАНЕНИЕ (усиленное):', {
+                        piece: state.lastMovedPiece,
+                        from: state.lastMovedFrom,
+                        whiteFirstMoveDone: state.whiteFirstMoveDone
+                    });
+                }
             }
 
-            // Отправляем ход на сервер
+            // ============================================
+            // ⚡ ОТПРАВКА СОСТОЯНИЯ НА СЕРВЕР (ДЛЯ МАРСЕЛЬСКИХ ШАХМАТ)
+            // ============================================
+            if (window.gameModes && window.gameModes.isMarseille()) {
+                const state = window.gameModes.marseilleState;
+                window.socket.emit('update_marseille_state', {
+                    room_id: currentRoom,
+                    state: {
+                        currentTurn: state.currentTurn,
+                        moveCount: state.moveCount,
+                        whiteFirstMoveDone: state.whiteFirstMoveDone,
+                        mustParryCheck: state.mustParryCheck,
+                        checkDeclared: state.checkDeclared,
+                        lastMovedPiece: state.lastMovedPiece,
+                        lastMovedTo: state.lastMovedTo 
+                    }
+                });
+                console.log('📤 Отправлено состояние Марсельских шахмат на сервер (рокировка):', state);
+            }
+
+            // Отправляем рокировку на сервер
             if (window.socket) {
                 window.socket.emit('move', {
                     room_id: currentRoom,
                     from: { row: fromRow, col: fromCol },
                     to: { row: row, col: col },
-                    isCastling: false,
-                    promotion: promotionPiece
+                    isCastling: true,
+                    game_mode: currentMode
                 });
             }
-
+            
+            // Синхронизируем undoManager
+            if (window.undoManager) {
+                setTimeout(function() {
+                    window.undoManager.syncFromGame(
+                        currentRoom,
+                        moveHistory,
+                        true
+                    );
+                }, 50);
+            }
+            
             selectedCell = null;
             renderBoard();
+            return;
+        }
+        // =================================================================================================
+        // === ОБЫЧНЫЙ ХОД С ПРОВЕРКОЙ ПРАВИЛ ===
+        
+        // Проверяем ход через chessRules (ДО превращения)
+        const isValid = window.chessRules.isValidMove(fromRow, fromCol, row, col, board, myColor);
+        if (!isValid) {
+            // isValid уже показывает toast
+            selectedCell = null;
+            renderBoard();
+            return;
+        }
+        
+        // ============================================
+        // ⚡ ТОЛЬКО ПОСЛЕ ПРОВЕРКИ ПРАВИЛ СПРАШИВАЕМ ПРЕВРАЩЕНИЕ
+        // ============================================
+        let promotionPiece = null;
+        const isPromotion = window.pawnPromotion && window.pawnPromotion.isPromotionMove(fromPiece, row);
+        if (isPromotion) {
+            promotionPiece = await window.pawnPromotion.ask(myColor);
+        }
+        
+        // Выполняем ход через chessRules
+        const newBoard = window.chessRules.makeMove(fromRow, fromCol, row, col, board, myColor, promotionPiece);
+        if (newBoard) {
+            board = newBoard;
+        } else {
+            // Если не удалось выполнить ход через chessRules
+            board[row][col] = fromPiece;
+            board[fromRow][fromCol] = null;
+            
+            if (promotionPiece) {
+                board[row][col] = myColor === 'white'
+                    ? promotionPiece.toUpperCase()
+                    : promotionPiece.toLowerCase();
+            }
+        }
+
+        if (promotionPiece && board[row][col] === fromPiece) {
+            board[row][col] = myColor === 'white'
+                ? promotionPiece.toUpperCase()
+                : promotionPiece.toLowerCase();
+        }
+        
+        // ============================================
+        // ⚡ ГЕНЕРАЦИЯ КОРОТКОЙ НОТАЦИИ
+        // ============================================
+        let moveStr;
+        if (window.gameModes) {
+            // Используем нотацию из gameModes
+            moveStr = window.gameModes.getMoveNotation({
+                fromRow, fromCol, toRow: row, toCol: col, piece: fromPiece
+            }, board, promotionPiece);
+        } else {
+            // Fallback: простая нотация
+            const toSquare = `${String.fromCharCode(97 + col)}${8 - row}`;
+            if (promotionPiece) {
+                const promoChar = myColor === 'white' ? promotionPiece.toUpperCase() : promotionPiece.toLowerCase();
+                moveStr = `${toSquare}=${promoChar.toUpperCase()}`;
+            } else {
+                moveStr = toSquare;
+            }
+        }
+        
+        // Проверяем шах/мат после хода
+        if (window.chessRules && window.chessRules.isEnabled) {
+            const boardCopy = board.map(row => [...row]);
+            if (window.chessRules.isCheckmate(boardCopy)) {
+                moveStr += '#';
+            } else if (window.chessRules.isInCheck(boardCopy)) {
+                moveStr += '+';
+            }
+        }
+        
+        // Сохраняем ход в историю
+        if (moveStr) {
+            moveHistory.push(moveStr);
+            window.moveHistory = moveHistory;
+            document.getElementById('lastMove').textContent = moveStr;
+            setStatus(`Ход: ${moveStr}`, 'success');
+        }
+        
+        // ============================================
+        // ⚡ ОБРАБОТКА ХОДА В РЕЖИМЕ ИГРЫ (МАРСЕЛЬСКИЕ ШАХМАТЫ)
+        // ============================================
+            console.log('🔍 ПЕРЕД ВЫЗОВОМ processMove');
+            console.log('  window.gameModes:', window.gameModes);
+            console.log('  isMarseille:', window.gameModes?.isMarseille());
+            console.log('  myColor:', myColor);
+            console.log('  fromPiece:', fromPiece);        
+        if (window.gameModes) {
+            console.log('🔥 Вызов processMove из onCellClick (обычный ход)');
+            window.gameModes.processMove({
+                fromRow, fromCol, toRow: row, toCol: col, 
+                piece: fromPiece,
+                isCastling: false,
+                promotion: promotionPiece
+            }, myColor, board, boardBeforeMove);
+        }
+
+        // ============================================
+        // ⚡ ОТЛАДКА: ПРОВЕРКА СОСТОЯНИЯ ПОСЛЕ ХОДА
+        // ============================================
+        console.log('🔍 ОТЛАДКА ПОСЛЕ ХОДА:');
+        console.log('  myColor:', myColor);
+        console.log('  fromPiece:', fromPiece);
+        console.log('  fromRow:', fromRow);
+        console.log('  fromCol:', fromCol);
+        console.log('  state:', window.gameModes?.marseilleState);
+        console.log('  state.whiteFirstMoveDone:', window.gameModes?.marseilleState?.whiteFirstMoveDone);
+        console.log('  state.lastMovedPiece:', window.gameModes?.marseilleState?.lastMovedPiece);
+        console.log('  state.moveCount:', window.gameModes?.marseilleState?.moveCount);
+
+        // ============================================
+        // ⚡ ПРИНУДИТЕЛЬНОЕ СОХРАНЕНИЕ ДЛЯ БЕЛЫХ (УСИЛЕННОЕ)
+        // ============================================
+        if (window.gameModes && window.gameModes.isMarseille()) {
+            const state = window.gameModes.marseilleState;
+            
+            // УСИЛЕННОЕ УСЛОВИЕ - сохраняем всегда для белых, если lastMovedPiece === null
+            if (state.lastMovedPiece === null && fromPiece) {
+                state.lastMovedPiece = fromPiece;
+                state.lastMovedFrom = { row: fromRow, col: fromCol };
+                console.log('🔥🔥🔥 ПРИНУДИТЕЛЬНОЕ СОХРАНЕНИЕ (усиленное):', {
+                    piece: state.lastMovedPiece,
+                    from: state.lastMovedFrom,
+                    whiteFirstMoveDone: state.whiteFirstMoveDone
+                });
+            }
+        }
+
+        // ============================================
+        // ⚡ ОТПРАВКА СОСТОЯНИЯ НА СЕРВЕР (ДЛЯ МАРСЕЛЬСКИХ ШАХМАТ)
+        // ============================================
+        if (window.gameModes && window.gameModes.isMarseille()) {
+            const state = window.gameModes.marseilleState;
+            window.socket.emit('update_marseille_state', {
+                room_id: currentRoom,
+                state: {
+                    currentTurn: state.currentTurn,
+                    moveCount: state.moveCount,
+                    whiteFirstMoveDone: state.whiteFirstMoveDone,
+                    mustParryCheck: state.mustParryCheck,
+                    checkDeclared: state.checkDeclared,
+                    lastMovedPiece: state.lastMovedPiece,
+                    lastMovedFrom: state.lastMovedFrom
+                }
+            });
+            console.log('📤 Отправлено состояние Марсельских шахмат на сервер (обычный ход):', state);
+        }
+
+        // Отправляем ход на сервер
+        if (window.socket) {
+            window.socket.emit('move', {
+                room_id: currentRoom,
+                from: { row: fromRow, col: fromCol },
+                to: { row: row, col: col },
+                isCastling: false,
+                promotion: promotionPiece,
+                game_mode: currentMode,
+                notation: moveStr
+            });
+        }
+
+        selectedCell = null;
+        renderBoard();
+        return;
+    }
+
+    // ============================================
+    // === РЕЖИМ "БЕЗ ПРАВИЛ" (NO_RULES) ===
+    // ============================================
+    
+    // Проверяем, не пытается ли игрок съесть свою фигуру
+    if (targetPiece) {
+        const fromColor = fromPiece === fromPiece.toUpperCase() ? 'white' : 'black';
+        const toColor = targetPiece === targetPiece.toUpperCase() ? 'white' : 'black';
+        if (fromColor === toColor) {
+            showToast('❌ Нельзя съесть свою фигуру!', 'error');
+            selectedCell = null;
+            renderBoard();
+            return;
         }
     }
+    
+    // ============================================
+    // ⚡ В РЕЖИМЕ БЕЗ ПРАВИЛ СПРАШИВАЕМ ПРЕВРАЩЕНИЕ
+    // ============================================
+    let promotionPiece = null;
+    if (window.pawnPromotion && window.pawnPromotion.isPromotionMove(fromPiece, row)) {
+        promotionPiece = await window.pawnPromotion.ask(myColor);
+    }
+    
+    board[row][col] = fromPiece;
+    board[fromRow][fromCol] = null;
+
+    if (promotionPiece) {
+        board[row][col] = myColor === 'white'
+            ? promotionPiece.toUpperCase()
+            : promotionPiece.toLowerCase();
+    }
+
+    // ============================================
+    // ⚡ ГЕНЕРАЦИЯ НОТАЦИИ ДЛЯ РЕЖИМА БЕЗ ПРАВИЛ
+    // ============================================
+    let moveStr;
+    if (window.gameModes) {
+        moveStr = window.gameModes.getMoveNotation({
+            fromRow, fromCol, toRow: row, toCol: col, piece: fromPiece
+        }, board, promotionPiece);
+    } else {
+        const toSquare = `${String.fromCharCode(97 + col)}${8 - row}`;
+        if (promotionPiece) {
+            const promoChar = myColor === 'white' ? promotionPiece.toUpperCase() : promotionPiece.toLowerCase();
+            moveStr = `${toSquare}=${promoChar.toUpperCase()}`;
+        } else {
+            moveStr = toSquare;
+        }
+    }
+    
+    // Сохраняем ход в историю
+    if (moveStr) {
+        moveHistory.push(moveStr);
+        window.moveHistory = moveHistory;
+        document.getElementById('lastMove').textContent = moveStr;
+        setStatus(`Ход: ${moveStr}`, 'success');
+    }
+
+    // ============================================
+    // ⚡ ОБРАБОТКА ХОДА В РЕЖИМЕ ИГРЫ (МАРСЕЛЬСКИЕ ШАХМАТЫ)
+    // ============================================
+    console.log('🔍 ПЕРЕД ВЫЗОВОМ processMove');
+    console.log('  window.gameModes:', window.gameModes);
+    console.log('  isMarseille:', window.gameModes?.isMarseille());
+    console.log('  myColor:', myColor);
+    console.log('  fromPiece:', fromPiece);    
+    if (window.gameModes) {
+        console.log('🔥 Вызов processMove из onCellClick (без правил)');
+        window.gameModes.processMove({
+            fromRow, fromCol, toRow: row, toCol: col, 
+            piece: fromPiece,
+            isCastling: false,
+            promotion: promotionPiece
+        }, myColor, board, boardBeforeMove);
+    }
+
+    // ============================================
+    // ⚡ ОТЛАДКА: ПРОВЕРКА СОСТОЯНИЯ ПОСЛЕ ХОДА
+    // ============================================
+    console.log('🔍 ОТЛАДКА ПОСЛЕ ХОДА:');
+    console.log('  myColor:', myColor);
+    console.log('  fromPiece:', fromPiece);
+    console.log('  fromRow:', fromRow);
+    console.log('  fromCol:', fromCol);
+    console.log('  state:', window.gameModes?.marseilleState);
+    console.log('  state.whiteFirstMoveDone:', window.gameModes?.marseilleState?.whiteFirstMoveDone);
+    console.log('  state.lastMovedPiece:', window.gameModes?.marseilleState?.lastMovedPiece);
+    console.log('  state.moveCount:', window.gameModes?.marseilleState?.moveCount);
+
+    // ============================================
+    // ⚡ ПРИНУДИТЕЛЬНОЕ СОХРАНЕНИЕ ДЛЯ БЕЛЫХ (УСИЛЕННОЕ)
+    // ============================================
+    if (window.gameModes && window.gameModes.isMarseille()) {
+        const state = window.gameModes.marseilleState;
+        
+        // УСИЛЕННОЕ УСЛОВИЕ - сохраняем всегда для белых, если lastMovedPiece === null
+        if (state.lastMovedPiece === null && fromPiece) {
+            state.lastMovedPiece = fromPiece;
+            state.lastMovedFrom = { row: fromRow, col: fromCol };
+            console.log('🔥🔥🔥 ПРИНУДИТЕЛЬНОЕ СОХРАНЕНИЕ (усиленное):', {
+                piece: state.lastMovedPiece,
+                from: state.lastMovedFrom,
+                whiteFirstMoveDone: state.whiteFirstMoveDone
+            });
+        }
+    }
+
+    // ============================================
+    // ⚡ ОТПРАВКА СОСТОЯНИЯ НА СЕРВЕР (ДЛЯ МАРСЕЛЬСКИХ ШАХМАТ)
+    // ============================================
+    if (window.gameModes && window.gameModes.isMarseille()) {
+        const state = window.gameModes.marseilleState;
+        window.socket.emit('update_marseille_state', {
+            room_id: currentRoom,
+            state: {
+                currentTurn: state.currentTurn,
+                moveCount: state.moveCount,
+                whiteFirstMoveDone: state.whiteFirstMoveDone,
+                mustParryCheck: state.mustParryCheck,
+                checkDeclared: state.checkDeclared,
+                lastMovedPiece: state.lastMovedPiece,
+                lastMovedFrom: state.lastMovedFrom
+            }
+        });
+        console.log('📤 Отправлено состояние Марсельских шахмат на сервер (без правил):', state);
+    }
+
+    // Отправляем ход на сервер
+    if (window.socket) {
+        window.socket.emit('move', {
+            room_id: currentRoom,
+            from: { row: fromRow, col: fromCol },
+            to: { row: row, col: col },
+            isCastling: false,
+            promotion: promotionPiece,
+            game_mode: currentMode,
+            notation: moveStr
+        });
+    }
+
+    selectedCell = null;
+    renderBoard();
 }
 
 // === СТАТУС ===
@@ -608,6 +971,15 @@ function updateHistoryDisplay() {
             console.log('📜 История обновлена, ходов:', moveHistory.length);
         }
     }
+
+    if (window.gameModes) {
+        const formattedHistory = window.gameModes.formatMoveHistory(
+            moveHistory,
+            window.moveDataHistory || []
+        );
+        // Используем formattedHistory для отображения
+    }
+
 }
 
 // === TOAST ===
@@ -786,6 +1158,15 @@ window.socket.on('connect', () => {
     }
 });
 
+// Добавляем глобальный перехват всех событий
+window.socket.onAny((event, ...args) => {
+    if (event === 'board_update') {
+        console.log(`📡 СОБЫТИЕ: ${event}`, args[0]);
+        console.log(`📡 undo: ${args[0]?.undo}`);
+        console.log(`📡 has_board: ${!!args[0]?.board}`);
+    }
+});
+
 // Обработчик получения истории с сервера
 window.socket.on('move_history_response', (data) => {
     console.log('📥 Получена история с сервера:', data);
@@ -793,6 +1174,14 @@ window.socket.on('move_history_response', (data) => {
         moveHistory = data.move_history;
         window.moveHistory = moveHistory;
         console.log('📜 История загружена с сервера:', moveHistory.length);
+        
+        // ============================================
+        // ⚡ ВОССТАНАВЛИВАЕМ СОСТОЯНИЕ МАРСЕЛЬСКИХ ШАХМАТ
+        // ============================================
+        if (window.gameModes && window.gameModes.isMarseille()) {
+            window.gameModes.restoreMarseilleStateFromHistory(moveHistory);
+            console.log('♟️ Состояние Марсельских шахмат восстановлено из истории');
+        }
         
         // Синхронизируем историю с chessRules
         if (window.chessRules) {
@@ -818,10 +1207,22 @@ window.socket.on('disconnect', () => {
     showToast('🔌 Отключено от сервера', 'error');
 });
 
+// ============================================
+// ОБРАБОТЧИК joined
+// ============================================
 window.socket.on('joined', (data) => {
     console.log('📥 joined:', data);
+    console.log('📥 Socket ID:', window.socket.id);
+    console.log('📥 Комната:', data.room_id);
+    console.log('📥 Режим из joined:', data.mode);
+
     currentRoom = data.room_id;
     window.currentRoom = currentRoom;
+
+    // Проверяем, что мы действительно в комнате
+    if (window.socket) {
+        console.log('🔍 Проверка комнаты:', window.socket.rooms);
+    }
     
     // === ОБНОВЛЯЕМ ИНФОРМАЦИЮ ОБ ИГРОКЕ ===
     myColor = data.player.color;
@@ -830,6 +1231,46 @@ window.socket.on('joined', (data) => {
     window.flipped = flipped;
     
     document.getElementById('roomDisplay').textContent = currentRoom;
+    
+    // ============================================
+    // ⚡ СИНХРОНИЗИРУЕМ РЕЖИМ ИГРЫ (ВАЖНО!)
+    // ============================================
+    if (data.mode && window.gameModes) {
+        console.log(`🎮 Установка режима из joined: ${data.mode}`);
+        window.gameModes.setMode(data.mode);
+        // Обновляем UI кнопок
+        if (typeof updateModeUI === 'function') {
+            updateModeUI(data.mode);
+        } else {
+            // Если updateModeUI не определена, обновляем кнопки вручную
+            const buttons = document.querySelectorAll('.mode-btn');
+            buttons.forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.mode === data.mode);
+            });
+        }
+        // Обновляем отображение в сайдбаре
+        const modeDisplay = document.getElementById('modeDisplay');
+        if (modeDisplay) {
+            const modeNames = {
+                'classic': 'Общие правила',
+                'marseille': 'Марсельские шахматы (2 хода)',
+                'no_turn': 'Без очереди',
+                'no_rules': 'Без правил'
+            };
+            modeDisplay.textContent = modeNames[data.mode] || data.mode;
+        }
+        console.log(`✅ Режим синхронизирован: ${data.mode}`);
+    }
+
+    // ============================================
+    // ⚡ ЗАПРАШИВАЕМ РЕЖИМ С СЕРВЕРА (принудительно)
+    // ============================================
+    if (window.socket && currentRoom) {
+        setTimeout(function() {
+            window.socket.emit('get_game_mode', { room_id: currentRoom });
+            console.log('📤 Принудительный запрос режима с сервера');
+        }, 300);
+    }
     
     // === СИНХРОНИЗИРУЕМ СТРЕЛКИ ===
     if (window.arrowSystem) {
@@ -840,6 +1281,9 @@ window.socket.on('joined', (data) => {
     // === СИНХРОНИЗИРУЕМ UNDO ===
     if (window.undoManager) {
         window.undoManager.setRoom(currentRoom);
+        console.log('✅ UndoManager синхронизирован с комнатой:', currentRoom);
+    } else {
+        console.warn('⚠️ UndoManager не найден при присоединении');
     }
     
     // === СИНХРОНИЗИРУЕМ ПРАВИЛА ===
@@ -861,6 +1305,12 @@ window.socket.on('joined', (data) => {
         console.log('✅ История chessRules очищена при присоединении');
     }
     
+    // Очищаем историю в undoManager
+    if (window.undoManager) {
+        window.undoManager.clearHistory();
+        console.log('✅ История undoManager очищена при присоединении');
+    }
+    
     updateUndoButton();
     
     // === ОПРЕДЕЛЯЕМ, ЧЕЙ ХОД ===
@@ -876,9 +1326,16 @@ window.socket.on('joined', (data) => {
     // ⚡ ЗАПРАШИВАЕМ ИСТОРИЮ С СЕРВЕРА
     // ============================================
     if (window.socket && currentRoom) {
+        // Запрашиваем историю сразу
+        window.socket.emit('get_move_history', { room_id: currentRoom });
+        console.log('📤 Запрос истории с сервера при присоединении');
+        
+        // И через 500ms для надежности
         setTimeout(function() {
-            window.socket.emit('get_move_history', { room_id: currentRoom });
-            console.log('📤 Запрос истории с сервера');
+            if (window.socket && currentRoom) {
+                window.socket.emit('get_move_history', { room_id: currentRoom });
+                console.log('📤 Повторный запрос истории с сервера');
+            }
         }, 500);
     }
     
@@ -909,7 +1366,32 @@ window.socket.on('rules_state', (data) => {
     }
 });
 
+// ============================================
+// ОБРАБОТЧИК board_update
+// ============================================
 window.socket.on('board_update', (data) => {
+    console.log('📥 board_update ПОЛУЧЕН:', data);
+    console.log('📥 board_update подробно:', {
+        has_move: !!data.move,
+        can_undo: data.can_undo,
+        players: data.players?.length,
+        arrows_count: data.arrows?.length || 0,
+        history_len: data.history_len || 0,
+        move_history_len: data.move_history?.length || 0,
+        undo: !!data.undo,
+        reset: !!data.reset,
+        clear: !!data.clear,
+        has_board: !!data.board
+    });
+    
+    // Если это undo, выводим доску отдельно
+    if (data.undo) {
+        console.log('🔄 ЭТО ОТМЕНА ХОДА!');
+        console.log('📊 Доска из undo:', data.board);
+        console.log('📜 История из undo:', data.move_history);
+    }
+
+
     console.log('📥 board_update:', {
         has_move: !!data.move,
         can_undo: data.can_undo,
@@ -951,6 +1433,14 @@ window.socket.on('board_update', (data) => {
         window.moveHistory = moveHistory;
         console.log('📜 История синхронизирована с сервера:', moveHistory.length);
         
+        // ============================================
+        // ⚡ ВОССТАНАВЛИВАЕМ СОСТОЯНИЕ МАРСЕЛЬСКИХ ШАХМАТ
+        // ============================================
+        if (window.gameModes && window.gameModes.isMarseille()) {
+            window.gameModes.restoreMarseilleStateFromHistory(moveHistory);
+            console.log('♟️ Состояние Марсельских шахмат восстановлено из истории в board_update');
+        }
+
         // Синхронизируем с chessRules
         if (window.chessRules) {
             window.chessRules.syncHistoryFromServer(moveHistory);
@@ -962,7 +1452,7 @@ window.socket.on('board_update', (data) => {
             window.undoManager.syncFromGame(
                 currentRoom,
                 moveHistory,
-                data.can_undo || false
+                data.can_undo || moveHistory.length > 0
             );
             console.log('✅ undoManager синхронизирован с историей');
         }
@@ -1067,7 +1557,7 @@ window.socket.on('board_update', (data) => {
             window.undoManager.syncFromGame(
                 currentRoom,
                 moveHistory,
-                data.can_undo || false
+                data.can_undo || moveHistory.length > 0
             );
             console.log('✅ undoManager синхронизирован с локальной историей');
         }
@@ -1082,6 +1572,31 @@ window.socket.on('board_update', (data) => {
             window.chessRules.isEnabled = data.rules_enabled;
             updateRulesButton();
             console.log(`♟️ Правила синхронизированы: ${data.rules_enabled ? 'включены' : 'выключены'}`);
+        }
+    }
+
+    // === СИНХРОНИЗАЦИЯ РЕЖИМА ИГРЫ ===
+    if (data.game_mode !== undefined && window.gameModes) {
+        const currentMode = window.gameModes.getMode();
+        console.log(`🎮 Текущий режим: ${currentMode}, получен с сервера: ${data.game_mode}`);
+        if (currentMode !== data.game_mode) {
+            console.log(`🎮 Синхронизация режима из board_update: ${data.game_mode}`);
+            window.gameModes.setMode(data.game_mode);
+            // Обновляем UI кнопок
+            if (typeof updateModeUI === 'function') {
+                updateModeUI(data.game_mode);
+            }
+            // Обновляем отображение в сайдбаре
+            const modeDisplay = document.getElementById('modeDisplay');
+            if (modeDisplay) {
+                const modeNames = {
+                    'classic': 'Общие правила',
+                    'marseille': 'Марсельские шахматы (2 хода)',
+                    'no_turn': 'Без очереди',
+                    'no_rules': 'Без правил'
+                };
+                modeDisplay.textContent = modeNames[data.game_mode] || data.game_mode;
+            }
         }
     }
 
@@ -1122,43 +1637,91 @@ window.socket.on('board_update', (data) => {
     
     // === ОБРАБОТКА ОТМЕНЫ ===
     if (data.undo) {
+        console.log('🔄 ===== НАЧАЛО ОБРАБОТКИ ОТМЕНЫ =====');
+        console.log('🔄 data.undo =', data.undo);
+        console.log('📊 data.board =', data.board);
+        console.log('📜 data.move_history =', data.move_history);
+        console.log('🔍 data.can_undo =', data.can_undo);
+        
+        // Показываем тост
         showToast('↩️ Ход отменён', 'info');
         
+        // ============================================
+        // ⚡ КРИТИЧЕСКИ ВАЖНО: ОБНОВЛЯЕМ ДОСКУ
+        // ============================================
+        if (data.board) {
+            board = data.board;
+            console.log('✅ Доска обновлена из данных отмены');
+            console.log('📊 Новая доска:', board);
+        } else {
+            console.error('❌ НЕТ ДАННЫХ ДОСКИ ДЛЯ ОТМЕНЫ!');
+            // Если доски нет, пробуем восстановить из истории
+            if (window.chessRules && window.chessRules.moveHistory.length > 0) {
+                console.log('🔄 Пробуем восстановить доску из chessRules');
+                // Здесь можно добавить логику восстановления
+            }
+        }
+        
+        // Обновляем историю
         if (data.move_history) {
+            // Обновляем локальную историю
             moveHistory = data.move_history;
             window.moveHistory = moveHistory;
-            console.log('📜 История обновлена после отмены (с сервера):', moveHistory.length);
+            console.log('📜 История синхронизирована с сервера:', moveHistory.length);
             
-            // Синхронизируем историю с chessRules
+            // ============================================
+            // ⚡ ВОССТАНАВЛИВАЕМ СОСТОЯНИЕ МАРСЕЛЬСКИХ ШАХМАТ
+            // ============================================
+            if (window.gameModes && window.gameModes.isMarseille()) {
+                window.gameModes.restoreMarseilleStateFromHistory(moveHistory);
+                console.log('♟️ Состояние Марсельских шахмат восстановлено из истории в board_update');
+            }
+            
+            // Синхронизируем с chessRules
             if (window.chessRules) {
                 window.chessRules.syncHistoryFromServer(moveHistory);
-                console.log('✅ История chessRules синхронизирована после отмены');
+                console.log('✅ История chessRules синхронизирована');
             }
+            
+            // Синхронизируем с undoManager
+            if (window.undoManager) {
+                window.undoManager.syncFromGame(
+                    currentRoom,
+                    moveHistory,
+                    data.can_undo || moveHistory.length > 0
+                );
+                console.log('✅ undoManager синхронизирован с историей');
+            }
+            
+            updateHistoryDisplay();
+            updateUndoButton();
+
         } else if (moveHistory.length > 0) {
             moveHistory.pop();
             window.moveHistory = moveHistory;
             console.log('📜 История обновлена после отмены (локально):', moveHistory.length);
             
-            // Удаляем последний ход из истории chessRules
             if (window.chessRules && window.chessRules.moveHistory.length > 0) {
                 window.chessRules.moveHistory.pop();
                 console.log('✅ Последний ход удалён из истории chessRules');
             }
         }
         
+        // Синхронизируем undoManager
         if (window.undoManager) {
             window.undoManager.syncFromGame(
                 currentRoom,
                 moveHistory,
-                data.can_undo || false
+                data.can_undo || moveHistory.length > 0
             );
             window.undoManager.updateUI();
             console.log('✅ undoManager синхронизирован после отмены');
         }
         
-        canUndo = data.can_undo || false;
+        canUndo = data.can_undo || moveHistory.length > 0;
         window.canUndo = canUndo;
         
+        // Сбрасываем выделение и подсветку
         selectedCell = null;
         lastMove.from = null;
         lastMove.to = null;
@@ -1169,9 +1732,24 @@ window.socket.on('board_update', (data) => {
         window.lastMoveData = null;
         window._pendingMove = null;
         
-        updateUndoButton();
+        // ============================================
+        // ⚡ ПРИНУДИТЕЛЬНАЯ ПЕРЕРИСОВКА ДОСКИ
+        // ============================================
+        console.log('🔄 Принудительная перерисовка доски после отмены');
+        console.log('📊 Доска перед рендерингом:', board);
+        
+        // Сначала обновляем всё
+        updateStatus();
+        updateSidebar();
         updateHistoryDisplay();
+        updateUndoButton();
+        
+        // Затем рендерим доску
         renderBoard();
+        
+        console.log('🔄 ===== КОНЕЦ ОБРАБОТКИ ОТМЕНЫ =====');
+        
+        return; // Выходим, чтобы не выполнять остальной код
     }
     
     // === ОБРАБОТКА СБРОСА ===
@@ -1239,10 +1817,29 @@ window.socket.on('board_update', (data) => {
     }
 });
 
-
 window.socket.on('error', (data) => {
     showToast(`❌ ${data.message}`, 'error');
     setStatus(`❌ ${data.message}`, 'error');
+});
+
+// Получение обновления состояния Марсельских шахмат
+window.socket.on('marseille_state_update', (data) => {
+    if (data.state && window.gameModes && window.gameModes.isMarseille()) {
+        console.log('📥 Получено обновление состояния Марсельских шахмат:', data.state);
+        // Обновляем состояние
+        const state = window.gameModes.marseilleState;
+        state.currentTurn = data.state.currentTurn;
+        state.moveCount = data.state.moveCount;
+        state.whiteFirstMoveDone = data.state.whiteFirstMoveDone;
+        state.mustParryCheck = data.state.mustParryCheck;
+        state.checkDeclared = data.state.checkDeclared;
+        state.lastMovedPiece = data.state.lastMovedPiece;
+        state.lastMovedTo = data.state.lastMovedTo;
+        
+        // Обновляем UI
+        updateStatus();
+        renderBoard();
+    }
 });
 
 // === КНОПКА ПРАВИЛ ===
@@ -1399,6 +1996,34 @@ function updateRoomLink() {
     } else {
         console.log('⚠️ Не удалось получить roomId для ссылки');
         return false;
+    }
+}
+
+// ============================================
+// ИНИЦИАЛИЗАЦИЯ UNDO MANAGER
+// ============================================
+
+// Инициализируем undoManager, если ещё не создан и не инициализируется
+if (typeof window.undoManager === 'undefined' && !window._undoInitRunning) {
+    if (typeof initUndoManager === 'function') {
+        try {
+            if (window.socketManager) {
+                window.undoManager = initUndoManager(window.socketManager);
+            } else if (window.socket) {
+                window.undoManager = initUndoManager(window.socket);
+            }
+            if (window.undoManager) {
+                console.log('✅ UndoManager инициализирован из script.js');
+            }
+        } catch (error) {
+            console.warn('⚠️ Ошибка инициализации UndoManager из script.js:', error);
+        }
+    } else {
+        console.log('ℹ️ initUndoManager не определён в script.js');
+    }
+} else {
+    if (window.undoManager) {
+        console.log('✅ UndoManager уже существует в script.js');
     }
 }
 

@@ -4,7 +4,7 @@ import random
 import string
 import time
 import copy
-import chess  # ← ДОБАВЛЯЕМ ИМПОРТ
+import chess 
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
@@ -103,16 +103,30 @@ def index():
 @app.route('/api/create')
 def create_game():
     room_id = generate_room_id()
+    # Получаем режим из запроса (если передан)
+    mode = request.args.get('mode', 'classic')
     games[room_id] = {
         'board': initial_board(),
         'players': [],
         'created_at': time.time(),
         'history': [],
         'move_history': [],
+        'move_data_history': [],  # Для хранения данных о ходах
         'arrows': [],
-        'rules_enabled': True
+        'rules_enabled': True,
+        'game_mode': mode,  # Используем переданный режим
+        # Состояние для Марсельских шахмат (синхронизируется между игроками)
+        'marseille_state': {
+            'currentTurn': 'white',
+            'moveCount': 0,
+            'whiteFirstMoveDone': False,
+            'mustParryCheck': False,
+            'checkDeclared': False,
+            'lastMovedPiece': None,
+            'lastMovedFrom': None
+        }
     }
-    print(f'✅ Комната создана: {room_id}')
+    print(f'✅ Комната создана: {room_id}, режим: {mode}')
     return jsonify({'room_id': room_id})
 
 @socketio.on('connect')
@@ -142,11 +156,15 @@ def handle_join(data):
             existing_player = p
             break
 
+    # Получаем текущий режим игры
+    game_mode = games[room_id].get('game_mode', 'classic')
+
     if existing_player:
         emit('joined', {
             'room_id': room_id,
             'player': existing_player,
-            'players': games[room_id]['players']
+            'players': games[room_id]['players'],
+            'mode': game_mode
         }, room=request.sid)
         
         emit('board_update', {
@@ -156,8 +174,15 @@ def handle_join(data):
             'history_len': len(games[room_id]['history']),
             'move_history': games[room_id].get('move_history', []),
             'arrows': games[room_id].get('arrows', []),
-            'rules_enabled': games[room_id].get('rules_enabled', True)
+            'rules_enabled': games[room_id].get('rules_enabled', True),
+            'game_mode': game_mode
         }, room=room_id)
+        
+        # Отправляем состояние Марсельских шахмат после присоединения
+        if 'marseille_state' in games[room_id]:
+            emit('marseille_state_update', {
+                'state': games[room_id]['marseille_state']
+            }, room=request.sid)
         return
 
     player = {
@@ -170,7 +195,8 @@ def handle_join(data):
     emit('joined', {
         'room_id': room_id,
         'player': player,
-        'players': games[room_id]['players']
+        'players': games[room_id]['players'],
+        'mode': game_mode
     }, room=request.sid)
 
     emit('players_update', {
@@ -184,33 +210,30 @@ def handle_join(data):
         'history_len': len(games[room_id]['history']),
         'move_history': games[room_id].get('move_history', []),
         'arrows': games[room_id].get('arrows', []),
-        'rules_enabled': games[room_id].get('rules_enabled', True)
+        'rules_enabled': games[room_id].get('rules_enabled', True),
+        'game_mode': game_mode
     }, room=room_id)
+
+    # Отправляем состояние Марсельских шахмат после присоединения
+    if 'marseille_state' in games[room_id]:
+        emit('marseille_state_update', {
+            'state': games[room_id]['marseille_state']
+        }, room=request.sid)
 
     print(f'👤 {player_name} присоединился к комнате {room_id}')
     print(f'👥 Игроков в комнате: {len(games[room_id]["players"])}')
+    print(f'🎮 Режим игры: {game_mode}')
 
 @socketio.on('move')
 def handle_move(data):
     """
     Обработчик хода от клиента.
-    Поддерживает:
-    - Обычные ходы
-    - Рокировку
-    - Превращение пешки
-    - Проверку правил (если включены)
-    - Запрет на съедение короля (если правила включены)
-    
-    История хранится в SAN формате (стандартная шахматная нотация):
-    - Обычные ходы: "e4", "Nf3"
-    - Рокировка: "O-O", "O-O-O"
-    - Превращение: "e8=Q", "a8=Q"
     """
     room_id = data.get('room_id')
     from_pos = data.get('from')
     to_pos = data.get('to')
     is_castling = data.get('isCastling', False)
-    promotion = data.get('promotion')  # 'q' | 'r' | 'b' | 'n' | None
+    promotion = data.get('promotion')
 
     if room_id not in games:
         emit('error', {'message': 'Комната не найдена'})
@@ -259,6 +282,18 @@ def handle_move(data):
                     emit('error', {'message': '❌ Путь для рокировки заблокирован'})
                     return
 
+    # === СОХРАНЯЕМ СОСТОЯНИЕ ДО ХОДА (ОДИН РАЗ!) ===
+    game['history'].append({
+        'board': copy.deepcopy(board),
+        'move': {
+            'from': from_pos,
+            'to': to_pos,
+            'piece': piece,
+            'isCastling': is_castling,
+            'promotion': promotion
+        }
+    })
+
     # === ЕСЛИ ЭТО РОКИРОВКА ===
     if is_castling:
         is_white = piece == 'K'
@@ -266,18 +301,7 @@ def handle_move(data):
         king = 'K' if is_white else 'k'
         rook = 'R' if is_white else 'r'
         
-        # SAN нотация для рокировки
         move_str = 'O-O' if to_pos['col'] > from_pos['col'] else 'O-O-O'
-        
-        game['history'].append({
-            'board': copy.deepcopy(board),
-            'move': {
-                'from': from_pos,
-                'to': to_pos,
-                'piece': piece,
-                'isCastling': True
-            }
-        })
         
         if to_pos['col'] > from_pos['col']:
             board[row][6] = king
@@ -293,7 +317,7 @@ def handle_move(data):
         game['board'] = board
         game['move_history'].append(move_str)
         
-        print(f'♟️ Рокировка: {move_str} ({from_pos["row"]},{from_pos["col"]} → {to_pos["row"]},{to_pos["col"]})')
+        print(f'♟️ Рокировка: {move_str}')
         print(f'📜 История: {len(game["move_history"])} ходов')
         
         emit('board_update', {
@@ -314,15 +338,6 @@ def handle_move(data):
         return
 
     # === ОБЫЧНЫЙ ХОД ===
-    game['history'].append({
-        'board': copy.deepcopy(board),
-        'move': {
-            'from': from_pos,
-            'to': to_pos,
-            'piece': piece
-        }
-    })
-
     board[to_pos['row']][to_pos['col']] = piece
     board[from_pos['row']][from_pos['col']] = None
 
@@ -341,13 +356,10 @@ def handle_move(data):
     history_len = len(game['history'])
     can_undo = history_len > 0
 
-    # ============================================
-    # ⚡ ГЕНЕРИРУЕМ SAN НОТАЦИЮ
-    # ============================================
+    # Генерируем SAN нотацию
     san_move = get_san_move(board, from_pos['row'], from_pos['col'], 
                            to_pos['row'], to_pos['col'], promotion)
     
-    # Добавляем в историю (SAN формат)
     game['move_history'].append(san_move)
 
     print(f'♟️ Ход: {piece} {from_pos["row"]},{from_pos["col"]} → {to_pos["row"]},{to_pos["col"]} ({san_move})')
@@ -375,21 +387,27 @@ def handle_move(data):
 @socketio.on('undo_move')
 def handle_undo(data):
     room_id = data.get('room_id')
+    print(f'↩️ Получен запрос на отмену хода в комнате: {room_id}')
 
     if room_id not in games:
+        print(f'❌ Комната {room_id} не найдена')
         emit('error', {'message': 'Комната не найдена'})
         return
 
     game = games[room_id]
     history = game['history']
+    print(f'📊 История содержит {len(history)} ходов')
 
     if not history:
+        print('❌ Нет ходов для отмены')
         emit('error', {'message': 'Нет ходов для отмены'})
         return
 
+    # Получаем предыдущее состояние ДО изменения
     previous_state = history.pop()
     game['board'] = previous_state['board']
     
+    # Удаляем последний ход из истории
     if game['move_history']:
         game['move_history'].pop()
 
@@ -397,8 +415,12 @@ def handle_undo(data):
     can_undo = history_len > 0
 
     print(f'↩️ Отменён ход, осталось: {history_len}')
+    print(f'📊 Доска после отмены: {game["board"]}')
 
-    emit('board_update', {
+    # ============================================
+    # ⚡ ОТПРАВЛЯЕМ ОБНОВЛЕНИЕ ВСЕМ В КОМНАТЕ
+    # ============================================
+    update_data = {
         'board': game['board'],
         'players': game['players'],
         'undo': True,
@@ -407,7 +429,14 @@ def handle_undo(data):
         'history_len': history_len,
         'move_history': game['move_history'],
         'arrows': game.get('arrows', [])
-    }, room=room_id)
+    }
+    
+    print(f'📤 Отправка board_update с undo=True в комнату {room_id}')
+    print(f'📤 Данные: {update_data}')
+    
+    # Отправляем всем в комнате
+    emit('board_update', update_data, room=room_id)
+    print('✅ board_update отправлен')
 
 @socketio.on('reset_board')
 def handle_reset(data):
@@ -538,6 +567,58 @@ def handle_get_move_history(data):
         'move_history': game.get('move_history', []),
         'history_len': len(game.get('move_history', []))
     }, room=request.sid)
+
+@socketio.on('set_game_mode')
+def handle_set_game_mode(data):
+    """Обработчик установки режима игры"""
+    room_id = data.get('room_id')
+    mode = data.get('mode')
+    
+    if room_id not in games:
+        emit('error', {'message': 'Комната не найдена'})
+        return
+    
+    game = games[room_id]
+    game['game_mode'] = mode
+    
+    # Отправляем всем в комнате
+    emit('mode_update', {
+        'room_id': room_id,
+        'mode': mode
+    }, room=room_id)
+    
+    print(f'🎮 Режим в комнате {room_id} изменён на: {mode}')
+
+@socketio.on('get_game_mode')
+def handle_get_game_mode(data):
+    room_id = data.get('room_id')
+    if room_id not in games:
+        emit('error', {'message': 'Комната не найдена'})
+        return
+    
+    game = games[room_id]
+    # Отправляем ответ с режимом в отдельном событии
+    emit('mode_response', {
+        'room_id': room_id,
+        'mode': game.get('game_mode', 'classic')
+    }, room=request.sid)
+    print(f'📤 Отправлен режим {game.get("game_mode", "classic")} для комнаты {room_id} (mode_response)')
+
+@socketio.on('update_marseille_state')
+def handle_update_marseille_state(data):
+    room_id = data.get('room_id')
+    state = data.get('state')
+    
+    if room_id not in games:
+        return
+    
+    # Сохраняем состояние в игре
+    games[room_id]['marseille_state'] = state
+    
+    # Отправляем всем в комнате (кроме отправителя)
+    emit('marseille_state_update', {
+        'state': state
+    }, room=room_id, skip_sid=request.sid)
 
 if __name__ == '__main__':
     print("\n" + "=" * 50)

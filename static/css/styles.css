@@ -878,3 +878,161 @@ body {
         padding: 8px;
     }
 }
+
+
+/* ============================================
+   КНОПКИ РЕЖИМОВ ИГРЫ (RADIOBUTTON)
+   ============================================ */
+
+.mode-btn {
+    position: relative;
+    padding: 8px 14px;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    color: #aaa;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1 1 auto;
+    min-width: 80px;
+    justify-content: center;
+}
+
+.mode-btn:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: #e0e0e0;
+    transform: translateY(-1px);
+}
+
+.mode-btn:active {
+    transform: scale(0.95);
+}
+
+/* Активная кнопка */
+.mode-btn.active {
+    background: rgba(40, 167, 69, 0.12);
+    border-color: #28a745;
+    color: #28a745;
+    box-shadow: 0 0 20px rgba(40, 167, 69, 0.1);
+}
+
+/* Индикатор (зелёный кружок) */
+.mode-btn .mode-indicator {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    background: transparent;
+    transition: all 0.3s ease;
+    flex-shrink: 0;
+    position: relative;
+}
+
+/* Активный индикатор - зелёный с пульсацией */
+.mode-btn.active .mode-indicator {
+    background: #28a745;
+    border-color: #28a745;
+    box-shadow: 0 0 12px rgba(40, 167, 69, 0.4);
+    animation: modeIndicatorPulse 2s ease-in-out infinite;
+}
+
+@keyframes modeIndicatorPulse {
+    0%, 100% {
+        box-shadow: 0 0 8px rgba(40, 167, 69, 0.3);
+    }
+    50% {
+        box-shadow: 0 0 20px rgba(40, 167, 69, 0.6);
+    }
+}
+
+/* Текст подсказки для режимов */
+.mode-hint {
+    font-size: 12px;
+    color: #666;
+    text-align: center;
+    padding: 4px 8px;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 4px;
+    margin-top: 4px;
+    min-height: 20px;
+    transition: all 0.3s ease;
+}
+
+.mode-hint.active {
+    color: #aaa;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+/* Адаптив для мобильных */
+@media (max-width: 600px) {
+    .mode-btn {
+        font-size: 11px;
+        padding: 6px 10px;
+        min-width: 60px;
+        gap: 4px;
+    }
+    
+    .mode-btn .mode-indicator {
+        width: 8px;
+        height: 8px;
+    }
+}
+
+/* ============================================
+   ОТОБРАЖЕНИЕ РЕЖИМА В САЙДБАРЕ
+   ============================================ */
+
+#modeDisplay {
+    transition: all 0.3s ease;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+/* Разные цвета для разных режимов в сайдбаре */
+#modeDisplay.mode-classic {
+    color: #28a745;
+}
+
+#modeDisplay.mode-marseille {
+    color: #17a2b8;
+}
+
+#modeDisplay.mode-no_turn {
+    color: #ffc107;
+}
+
+#modeDisplay.mode-no_rules {
+    color: #dc3545;
+}
+
+/* Анимация при смене режима в сайдбаре */
+@keyframes modeDisplayChange {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    30% {
+        transform: scale(1.2);
+        opacity: 0.7;
+    }
+    60% {
+        transform: scale(0.9);
+        opacity: 0.9;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+#modeDisplay.changing {
+    animation: modeDisplayChange 0.4s ease-out;
+}

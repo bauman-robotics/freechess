@@ -1,3 +1,4 @@
+// static/js/integration/undo-integration.js
 // ============================================
 // ИНТЕГРАЦИЯ UNDO С ОСНОВНЫМ ПРИЛОЖЕНИЕМ
 // ============================================
@@ -9,8 +10,9 @@
     
     // Функция синхронизации
     function syncUndoWithGame() {
-        if (typeof window.undoManager === 'undefined') {
-            console.warn('⚠️ UndoManager не найден');
+        // Проверяем, что undoManager существует
+        if (typeof window.undoManager === 'undefined' || window.undoManager === null) {
+            console.warn('⚠️ UndoManager не найден, пропускаем синхронизацию');
             return;
         }
         
@@ -27,6 +29,28 @@
                 window.moveHistory,
                 window.canUndo || window.moveHistory.length > 0
             );
+            console.log('✅ UndoManager синхронизирован с историей:', window.moveHistory.length);
+        } else {
+            // Если истории нет, но она может быть на сервере - запрашиваем
+            if (roomId && roomId !== '—' && window.socket) {
+                console.log('📤 Запрос истории с сервера при инициализации undo');
+                window.socket.emit('get_move_history', { room_id: roomId });
+            }
+        }
+    }
+    
+    // Функция для безопасной синхронизации
+    function safeSyncUndo() {
+        try {
+            // Проверяем, что undoManager существует перед вызовом
+            if (window.undoManager && typeof window.undoManager.setRoom === 'function') {
+                syncUndoWithGame();
+            } else {
+                console.log('⏳ UndoManager ещё не инициализирован, отложенная синхронизация...');
+                setTimeout(safeSyncUndo, 200);
+            }
+        } catch (error) {
+            console.warn('⚠️ Ошибка при синхронизации Undo:', error);
         }
     }
     
@@ -43,14 +67,14 @@
             }
         }
         
-        // Синхронизируем
-        setTimeout(syncUndoWithGame, 200);
+        // Синхронизируем с задержкой
+        setTimeout(safeSyncUndo, 300);
         
         // Синхронизируем при изменении комнаты
         const observer = new MutationObserver(function() {
             const roomDisplay = document.getElementById('roomDisplay');
             if (roomDisplay && roomDisplay.textContent !== '—') {
-                syncUndoWithGame();
+                setTimeout(safeSyncUndo, 100);
             }
         });
         
@@ -62,15 +86,33 @@
         // Перехватываем socket события
         if (window.socket) {
             window.socket.on('joined', function() {
-                setTimeout(syncUndoWithGame, 100);
+                setTimeout(safeSyncUndo, 150);
             });
             
             window.socket.on('board_update', function(data) {
-                if (data.move && !data.undo) {
-                    setTimeout(syncUndoWithGame, 50);
+                // Если есть move_history, синхронизируем
+                if (data.move_history) {
+                    console.log('📥 Обновление истории из board_update:', data.move_history.length);
+                    if (window.undoManager) {
+                        window.undoManager.syncFromGame(
+                            window.currentRoom,
+                            data.move_history,
+                            data.can_undo || data.move_history.length > 0
+                        );
+                    }
                 }
-                if (data.undo || data.reset || data.clear) {
-                    setTimeout(syncUndoWithGame, 50);
+                setTimeout(safeSyncUndo, 100);
+            });
+            
+            // Обработчик получения истории
+            window.socket.on('move_history_response', function(data) {
+                console.log('📥 Получена история с сервера в undo-integration:', data);
+                if (data.move_history && window.undoManager) {
+                    window.undoManager.syncFromGame(
+                        window.currentRoom || data.room_id,
+                        data.move_history,
+                        data.move_history.length > 0
+                    );
                 }
             });
         }
