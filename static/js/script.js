@@ -226,24 +226,9 @@ async function onCellClick(row, col) {
 
         const isCastlingMove = (fromPiece === 'K' || fromPiece === 'k') && Math.abs(col - fromCol) === 2;
 
-        // === ПРЕВРАЩЕНИЕ ПЕШКИ ===
-        let promotionPiece = null;
-        if (!isCastlingMove && window.pawnPromotion && window.pawnPromotion.isPromotionMove(fromPiece, row)) {
-            promotionPiece = await window.pawnPromotion.ask(myColor);
-        }
-        
         // ============================================
-        // ⚡ СОХРАНЯЕМ КООРДИНАТЫ ДЛЯ ИСТОРИИ (ДО ОТПРАВКИ НА СЕРВЕР)
+        // ⚡ ПРОВЕРЯЕМ ПРАВИЛА ДО ТОГО, КАК СПРАШИВАТЬ ПРЕВРАЩЕНИЕ!
         // ============================================
-        window._pendingMove = {
-            from: { row: fromRow, col: fromCol },
-            to: { row: row, col: col },
-            piece: fromPiece,
-            isCastling: isCastlingMove,
-            promotion: promotionPiece
-        };
-        
-        // === ПРОВЕРКА ПРАВИЛ ЧЕРЕЗ chessRules ===
         if (rulesEnabled) {
             if (isCastlingMove) {
                 // Полная проверка рокировки через chessRules
@@ -315,13 +300,21 @@ async function onCellClick(row, col) {
             } else {
                 // === ОБЫЧНЫЙ ХОД С ПРОВЕРКОЙ ПРАВИЛ ===
                 
-                // Проверяем ход через chessRules
+                // Проверяем ход через chessRules (ДО превращения)
                 const isValid = window.chessRules.isValidMove(fromRow, fromCol, row, col, board, myColor);
                 if (!isValid) {
                     // isValid уже показывает toast
                     selectedCell = null;
                     renderBoard();
                     return;
+                }
+                
+                // ============================================
+                // ⚡ ТОЛЬКО ПОСЛЕ ПРОВЕРКИ ПРАВИЛ СПРАШИВАЕМ ПРЕВРАЩЕНИЕ
+                // ============================================
+                let promotionPiece = null;
+                if (window.pawnPromotion && window.pawnPromotion.isPromotionMove(fromPiece, row)) {
+                    promotionPiece = await window.pawnPromotion.ask(myColor);
                 }
                 
                 // Выполняем ход через chessRules
@@ -332,9 +325,15 @@ async function onCellClick(row, col) {
                     // Если не удалось выполнить ход через chessRules
                     board[row][col] = fromPiece;
                     board[fromRow][fromCol] = null;
+                    
+                    if (promotionPiece) {
+                        board[row][col] = myColor === 'white'
+                            ? promotionPiece.toUpperCase()
+                            : promotionPiece.toLowerCase();
+                    }
                 }
 
-                if (promotionPiece) {
+                if (promotionPiece && board[row][col] === fromPiece) {
                     board[row][col] = myColor === 'white'
                         ? promotionPiece.toUpperCase()
                         : promotionPiece.toLowerCase();
@@ -396,6 +395,14 @@ async function onCellClick(row, col) {
                     renderBoard();
                     return;
                 }
+            }
+            
+            // ============================================
+            // ⚡ В РЕЖИМЕ БЕЗ ПРАВИЛ СПРАШИВАЕМ ПРЕВРАЩЕНИЕ
+            // ============================================
+            let promotionPiece = null;
+            if (window.pawnPromotion && window.pawnPromotion.isPromotionMove(fromPiece, row)) {
+                promotionPiece = await window.pawnPromotion.ask(myColor);
             }
             
             board[row][col] = fromPiece;
